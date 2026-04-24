@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Phils Home** — an 18-card dashboard plugin for Even Realities G2 smart glasses. Replaces the Even home screen for the user: sports scores, Duck Ops business status, Google Tasks, GitHub PRs / CI, Gmail, Now Playing, Calendar, Messages. Tap to expand to detail; swipe for carousel navigation; ring-tap for actions (approvals, task completion) with an arm-and-confirm two-tap flow.
+**Phils Home** — an 18-card dashboard plugin for Even Realities G2 smart glasses. Replaces the Even home screen for the user: sports scores, Duck Ops business status, Google Tasks, GitHub PRs / CI, Gmail, Now Playing, Calendar, Messages. Tap to expand to detail; swipe for carousel navigation; tap on an actionable item in detail view to open a full-screen action picker (approve / reject / complete / skip / etc.), and list-tap the chosen option to execute it.
 
 ## Commands
 
@@ -58,17 +58,19 @@ The G2 temple + optional R1 ring give us 6 usable inputs. Current assignments:
 
 | Gesture | Action |
 |---|---|
-| Glasses single tap | Toggle dashboard ↔ detail |
+| Single tap (dashboard) | Enter detail view for the current card |
+| Single tap (detail, non-actionable item) | Back to dashboard |
+| Single tap (detail, actionable item) | **Open the action picker modal** (full-screen list of card-specific options) |
 | Glasses double tap | System exit dialog (Even convention — never override) |
 | Ring double tap (detail) | Non-destructive back to dashboard |
 | Ring double tap (dashboard) | Exit app |
 | Swipe up/down (dashboard) | Prev/next card |
-| Swipe up/down (detail, item-paginated, single-action card) | Prev/next item within card |
-| Swipe up/down (detail, dual-action card) | Cycle focus: item-content → APPROVE → REJECT → next item (the "action cursor") |
-| Swipe up/down (detail otherwise) | Prev/next card |
-| Ring single tap (detail, single-action card) | Arm (first tap) / confirm (second tap within ARM_WINDOW_MS = 3s) |
-| Ring single tap (detail, dual-action card, focus=none) | Prompts the user to swipe to pick an action |
-| Ring single tap (detail, dual-action card, focus=approve/reject) | Arm the focused action; second tap within ARM_WINDOW_MS executes it |
+| Swipe up/down (detail, item-paginated card) | Prev/next item within card |
+| Swipe up/down (detail, non-paginated) | Prev/next card |
+| Picker: list-tap an option | Execute the chosen action, flash result, return to dashboard |
+| Picker: double-tap | Cancel picker (stay in detail view) |
+
+Ring-tap and glasses-tap are treated identically for the single-tap primary action; source only matters for the double-tap (ring-double = back, glasses-double = exit).
 
 Ring vs glasses is distinguished by `event.sysEvent.eventSource` (`TOUCH_EVENT_FROM_RING = 2`, glasses = 1 or 3). See `src/even.ts:classifySource`.
 
@@ -98,7 +100,7 @@ Heartbeat (10s) re-renders to prevent firmware display sleep. No heartbeat = dis
 - **One active card polls.** `startActiveCardPoll()` restarts the per-card timer on card change; swiping away stops the previous card's polling.
 - **Cache shared data sources.** `loadDuckOps()` caches for 30s so the 6+ Duck Ops cards don't each hit `/widget-status.json` on swipe.
 - **Update `app.json` `permissions.network.whitelist`** when you add a new host. Packaged `.ehpk` blocks non-whitelisted fetches.
-- **Approvals safety.** `POST /approvals/approve` requires `{confirm: true}` or `{dryRun: true}` in body — this prevents accidental LAN requests from triggering real publishes. The two-tap ring-arm flow on glasses is the user-side half of the safety.
+- **Approvals safety.** `POST /approvals/approve` requires `{confirm: true}` or `{dryRun: true}` in body — this prevents accidental LAN requests from triggering real publishes. The picker modal on glasses is the user-side half of the safety: a single tap opens the picker, the list-tap selects the action, and double-tap-cancel dismisses without firing anything.
 
 ## How to add common things
 

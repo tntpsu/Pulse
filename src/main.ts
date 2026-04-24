@@ -1,7 +1,7 @@
 import './style.css'
 
 import { loadWeather, staleAgeLabel } from './api'
-import { CARDS, type CardDefinition } from './cards/index'
+import { CARDS, type ActionResult, type CardDefinition } from './cards/index'
 import { connectEvenRuntime, type InputSource } from './even'
 import type { WeatherSnapshot } from './types'
 
@@ -43,7 +43,7 @@ root.innerHTML = `
       <button id="toggle" class="button button-secondary">Toggle detail</button>
       <button id="prev-item" class="button button-secondary">Prev item</button>
       <button id="next-item" class="button button-secondary">Next item</button>
-      <button id="ring-tap" class="button button-secondary">Ring tap (arm/confirm)</button>
+      <button id="ring-tap" class="button button-secondary">Tap (open picker)</button>
       <button id="refresh" class="button button-secondary">Refresh card</button>
     </div>
     <p id="runtime-note" class="runtime-note">Browser preview mode.</p>
@@ -88,19 +88,37 @@ let viewMode: ViewMode = 'dashboard'
 let currentItemIndex = 0
 let transientMessage: string | null = null
 let transientTimer: number | null = null
+// Guards re-entrant picker opens from rapid taps while the modal is resolving.
+let pickerOpen = false
 
-type ArmedAction = 'approve' | 'reject'
-interface ArmedState {
-  artifactKey: string
-  expiresAt: number
-  action: ArmedAction
+interface PickerOption {
+  label: string
+  run: (item: unknown) => Promise<ActionResult>
 }
 
-const ARM_WINDOW_MS = 3000
+function pickerOptionsFor(card: CardDefinition): PickerOption[] {
+  const opts: PickerOption[] = []
+  if (card.confirmAction) {
+    opts.push({ label: card.confirmLabel ?? 'APPROVE', run: card.confirmAction })
+  }
+  if (card.rejectAction) {
+    opts.push({ label: card.rejectLabel ?? 'REJECT', run: card.rejectAction })
+  }
+  return opts
+}
 
-let armed: ArmedState | null = null
-let armDisarmTimer: number | null = null
-let actionFocus: 'none' | ArmedAction = 'none'
+function pickerHeaderFor(
+  card: CardDefinition,
+  item: unknown,
+  index: number,
+  total: number,
+): string {
+  if (card.formatItem) {
+    const firstLine = card.formatItem(item, index, total).split('\n')[0] ?? ''
+    if (firstLine) return firstLine
+  }
+  return card.title
+}
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`
@@ -148,14 +166,6 @@ function clampItemIndex(): void {
   if (currentItemIndex < 0) currentItemIndex = 0
 }
 
-function isActionableCard(card: CardDefinition): boolean {
-  return !!card.confirmAction || !!card.rejectAction
-}
-
-function isDualActionCard(card: CardDefinition): boolean {
-  return !!card.confirmAction && !!card.rejectAction
-}
-
 function formatCardOutput(): string {
   if (transientMessage) return transientMessage
   const card = currentCard()
@@ -166,23 +176,10 @@ function formatCardOutput(): string {
       clampItemIndex()
       const item = items[currentItemIndex]!
       const base = card.formatItem(item, currentItemIndex, items.length)
-      if (isActionableCard(card)) {
-        const confirmLabel = card.confirmLabel ?? 'APPROVE'
-        const rejectLabel = card.rejectLabel ?? 'REJECT'
-        const itemKey = JSON.stringify(item)
-        const isArmed = !!armed && armed.artifactKey === itemKey
-        let hint: string
-        if (isArmed) {
-          const armedLabel = armed!.action === 'reject' ? rejectLabel : confirmLabel
-          hint = `[ring] CONFIRM ${armedLabel}`
-        } else if (isDualActionCard(card)) {
-          const a = actionFocus === 'approve' ? `>${confirmLabel}<` : confirmLabel
-          const b = actionFocus === 'reject' ? `>${rejectLabel}<` : rejectLabel
-          hint = `[swipe] ${a} | ${b}`
-        } else {
-          hint = `[ring] ${confirmLabel}`
-        }
-        return `${base}\n\n${hint}`
+      const options = pickerOptionsFor(card)
+      if (options.length > 0) {
+        const labels = options.map(o => o.label).join(' / ')
+        return `${base}\n\n[tap] ${labels}`
       }
       return base
     }
@@ -254,8 +251,6 @@ async function changeCard(delta: number): Promise<void> {
   markActive()
   currentCardIndex = next
   currentItemIndex = 0
-  armed = null
-  actionFocus = 'none'
   transientMessage = null
   await paint()
   startActiveCardPoll()
@@ -275,8 +270,6 @@ async function changeItem(delta: number): Promise<void> {
 async function toggleViewMode(): Promise<void> {
   markActive()
   viewMode = viewMode === 'dashboard' ? 'detail' : 'dashboard'
-  armed = null
-  actionFocus = 'none'
   await paint()
 }
 
@@ -293,89 +286,61 @@ async function flashTransient(text: string, durationMs: number): Promise<void> {
   }, durationMs)
 }
 
-async function handleRingTap(): Promise<void> {
+async function handlePrimaryTap(): Promise<void> {
   markActive()
   const card = currentCard()
+  // Dashboard → detail.
+  if (viewMode === 'dashboard') {
+    viewMode = 'detail'
+    await paint()
+    return
+  }
+  // Detail: if the current item is actionable, open the picker; else toggle back.
   const items = currentItems(card)
-  const isActionable =
-    viewMode === 'detail' &&
-    (!!card.confirmAction || !!card.rejectAction) &&
-    !!card.formatItem &&
-    !!items &&
-    items.length > 0
-  // Non-actionable ring taps fall back to toggling detail mode so the ring
-  // has parity with the glasses tap for navigation.
-  if (!isActionable) {
-    await toggleViewMode()
+  const options = pickerOptionsFor(card)
+  const itemActionable =
+    options.length > 0 && !!card.formatItem && !!items && items.length > 0
+  if (!itemActionable) {
+    viewMode = 'dashboard'
+    await paint()
     return
   }
   const item = items![currentItemIndex]
   if (item === undefined) {
-    await toggleViewMode()
+    viewMode = 'dashboard'
+    await paint()
     return
   }
-  const itemKey = JSON.stringify(item)
-  const now = Date.now()
-
-  // Second tap within window on same item → execute the staged action.
-  if (armed && armed.artifactKey === itemKey && now < armed.expiresAt) {
-    const stagedAction = armed.action
-    armed = null
-    const action = stagedAction === 'reject' ? card.rejectAction : card.confirmAction
-    if (!action) {
-      await flashTransient('No action available', 1500)
-      return
-    }
-    await flashTransient(stagedAction === 'reject' ? 'Rejecting...' : 'Sending...', 800)
-    const result = await action(item)
+  if (!even) {
+    // Browser preview has no modal surface — fall back to toggle so clicking
+    // the preview "tap" button at least does something navigable.
+    viewMode = 'dashboard'
+    await paint()
+    return
+  }
+  if (pickerOpen) return
+  pickerOpen = true
+  try {
+    const header = pickerHeaderFor(card, item, currentItemIndex, items!.length)
+    const pickedIndex = await even.openPicker(header, options.map(o => o.label))
+    if (pickedIndex === null) return // double-tap cancel — leave detail state intact
+    const chosen = options[pickedIndex]
+    if (!chosen) return
+    await flashTransient(`${chosen.label}...`, 800)
+    const result = await chosen.run(item)
     transientMessage = null
     if (result.ok) {
       await flashTransient(result.message, 1500)
       await fetchCard(card)
       currentItemIndex = 0
-      actionFocus = 'none'
       viewMode = 'dashboard'
       await paint()
     } else {
       await flashTransient(result.message, 2500)
     }
-    return
+  } finally {
+    pickerOpen = false
   }
-
-  // For dual-action cards, the user MUST explicitly select via swipe first —
-  // ring tap with no focus arms nothing (prevents the "auto-approve" surprise).
-  if (isDualActionCard(card)) {
-    if (actionFocus === 'none') {
-      const a = card.confirmLabel ?? 'APPROVE'
-      const b = card.rejectLabel ?? 'REJECT'
-      await flashTransient(`Swipe to choose ${a} or ${b}`, 1500)
-      return
-    }
-    if (armDisarmTimer !== null) window.clearTimeout(armDisarmTimer)
-    armed = { artifactKey: itemKey, expiresAt: now + ARM_WINDOW_MS, action: actionFocus }
-    await paint()
-    armDisarmTimer = window.setTimeout(() => {
-      armDisarmTimer = null
-      if (armed && armed.expiresAt <= Date.now()) {
-        armed = null
-        void paint()
-      }
-    }, ARM_WINDOW_MS + 100)
-    return
-  }
-
-  // Single-action cards: ring tap arms the only available action.
-  const defaultAction: ArmedAction = card.confirmAction ? 'approve' : 'reject'
-  if (armDisarmTimer !== null) window.clearTimeout(armDisarmTimer)
-  armed = { artifactKey: itemKey, expiresAt: now + ARM_WINDOW_MS, action: defaultAction }
-  await paint()
-  armDisarmTimer = window.setTimeout(() => {
-    armDisarmTimer = null
-    if (armed && armed.expiresAt <= Date.now()) {
-      armed = null
-      void paint()
-    }
-  }, ARM_WINDOW_MS + 100)
 }
 
 async function refreshWeather(): Promise<void> {
@@ -393,7 +358,7 @@ ui.next.addEventListener('click', () => void changeCard(+1))
 ui.toggle.addEventListener('click', () => void toggleViewMode())
 ui.prevItem.addEventListener('click', () => void changeItem(-1))
 ui.nextItem.addEventListener('click', () => void changeItem(+1))
-ui.ringTap.addEventListener('click', () => void handleRingTap())
+ui.ringTap.addEventListener('click', () => void handlePrimaryTap())
 ui.refresh.addEventListener('click', () => void refreshActiveCard())
 
 // Connect the glasses runtime FIRST so `paint()` can safely read `even`.
@@ -422,48 +387,13 @@ window.setInterval(() => void refreshWeather(), WEATHER_POLL_MS)
 
 if (even) {
   ui.note.textContent =
-    'Glasses connected. Tap = expand/collapse (ring = action on actionable cards); swipe = nav; glasses 2-tap = exit app; ring 2-tap = back to dashboard.'
-  even.onTap((source: InputSource) => {
-    if (source === 'ring') {
-      void handleRingTap()
-      return
-    }
-    void toggleViewMode()
+    'Glasses connected. Tap = enter detail, or open action picker on an actionable item. Swipe = nav/paginate. Glasses 2-tap = exit app. Ring 2-tap = back to dashboard.'
+  even.onTap((_source: InputSource) => {
+    void handlePrimaryTap()
   })
   even.onSwipe(dir => {
     const card = currentCard()
     const items = currentItems(card)
-    // Dual-action card: swipe cycles through item-content → APPROVE → REJECT
-    // → next item. This is what makes the action picker feel like a cursor.
-    if (
-      viewMode === 'detail' &&
-      isDualActionCard(card) &&
-      items &&
-      items.length > 0 &&
-      card.formatItem
-    ) {
-      markActive()
-      armed = null
-      if (dir === 'down') {
-        if (actionFocus === 'none') actionFocus = 'approve'
-        else if (actionFocus === 'approve') actionFocus = 'reject'
-        else {
-          actionFocus = 'none'
-          void changeItem(+1)
-          return
-        }
-      } else {
-        if (actionFocus === 'reject') actionFocus = 'approve'
-        else if (actionFocus === 'approve') actionFocus = 'none'
-        else {
-          actionFocus = 'none'
-          void changeItem(-1)
-          return
-        }
-      }
-      void paint()
-      return
-    }
     if (viewMode === 'detail' && items && items.length > 1 && card.formatItem) {
       void changeItem(dir === 'down' ? +1 : -1)
       return
@@ -474,8 +404,6 @@ if (even) {
     // Ring 2-tap in detail → non-destructive "back to dashboard"
     if (source === 'ring' && viewMode === 'detail') {
       viewMode = 'dashboard'
-      armed = null
-      actionFocus = 'none'
       void paint()
       return
     }
