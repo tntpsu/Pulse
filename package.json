@@ -1,0 +1,23 @@
+{
+  "name": "phils-home",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "qr": "evenhub qr",
+    "pack": "evenhub pack app.json dist -o phils-home.ehpk",
+    "deploy": "npm run build && npm run pack && echo '\\nphils-home.ehpk ready: '$(pwd)'/phils-home.ehpk\\nUpload to https://hub.evenrealities.com/application'"
+  },
+  "dependencies": {
+    "@evenrealities/even_hub_sdk": "^0.0.10"
+  },
+  "devDependencies": {
+    "@evenrealities/evenhub-cli": "^0.1.11",
+    "@evenrealities/evenhub-simulator": "^0.7.2",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.7"
+  }
+}

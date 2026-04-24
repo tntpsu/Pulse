@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.ehpk
+
+.env
+.env.local
+.env.*.local
+
+.DS_Store
+.vite/
+*.log
+npm-debug.log*
+
+.idea/
+.vscode/
+
+.claude/settings.local.json
