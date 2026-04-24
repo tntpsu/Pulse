@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Phils Home** — an 18-card dashboard plugin for Even Realities G2 smart glasses. Replaces the Even home screen for the user: sports scores, Duck Ops business status, Google Tasks, GitHub PRs / CI, Gmail, Now Playing, Calendar, Messages. Tap to expand to detail; swipe for carousel navigation; tap on an actionable item in detail view to open a full-screen action picker (approve / reject / complete / skip / etc.), and list-tap the chosen option to execute it.
+**Phils Home** — a 15-card dashboard plugin for Even Realities G2 smart glasses. Replaces the Even home screen for the user: a Today aggregate glance card, sports scores, Duck Ops business status, Google Tasks, GitHub PRs / CI, Gmail, Now Playing, Calendar, Messages. Tap to expand to detail; swipe for carousel navigation; tap on an actionable item in detail view to open a full-screen action picker (approve / reject / dry-run / complete / skip / etc.), and list-tap the chosen option to execute it. Ring-double-tap in dashboard opens the card-selector modal for jumping anywhere in the carousel without swiping through every card.
 
 ## Commands
 
@@ -44,13 +44,24 @@ Item-paginated cards (Approvals, Tasks) also provide:
 ```ts
   getItems(data): unknown[],
   formatItem(item, index, total): string,
-  confirmPrompt?(item): string,           // shown after first ring-tap
-  confirmAction?(item): Promise<ActionResult>   // runs on second ring-tap
+  // Simple two-option picker: main.ts synthesizes [confirmLabel, rejectLabel]
+  // from these fields. Use for cards that just have APPROVE/REJECT or similar.
+  confirmAction?(item): Promise<ActionResult>,
+  rejectAction?(item): Promise<ActionResult>,
+  confirmLabel?: string,
+  rejectLabel?: string,
+  // For richer flows (3+ options, undo, read-only preview), declare getActions
+  // directly. Takes precedence over confirmAction/rejectAction.
+  getActions?(item): PickerOption[]
 ```
+
+`PickerOption` is `{ label: string; run: () => Promise<ActionResult>; undo?: () => Promise<ActionResult> }`. If a chosen option has `undo`, the app flashes a 3-second UNDO prompt after success; a tap during that window fires the undo closure. Used by Tasks for `un-complete` / `un-skip`. Not used by Approvals APPROVE (email irreversible); the `DRY RUN` option exists as the preview-first alternative.
 
 **To add a new card**: copy `src/cards/_template.ts` → `src/cards/<id>.ts`, implement, add one import + one entry to the `CARDS` array in `src/cards/index.ts` (order in that array = carousel order). `_template.ts` documents every option.
 
 Shared helpers live in `src/cards/_shared.ts` (formatError/formatLoading) and `src/cards/_sports.ts` (ESPN card factory).
+
+The **Today** card (`src/cards/today.ts`) is the first card in the carousel and aggregates counts from other data sources. The left column's attention-badges line reads from Today's loaded state (`cardStates.get('today').data`) — Today must have loaded once before badges appear. Keep the Today snapshot shape stable; `formatAttentionBadges` in `main.ts` reads it by field.
 
 ## Gesture contract
 
@@ -60,17 +71,18 @@ The G2 temple + optional R1 ring give us 6 usable inputs. Current assignments:
 |---|---|
 | Single tap (dashboard) | Enter detail view for the current card |
 | Single tap (detail, non-actionable item) | Back to dashboard |
-| Single tap (detail, actionable item) | **Open the action picker modal** (full-screen list of card-specific options) |
+| Single tap (detail, actionable item) | **Open the action picker modal** (full-screen list of card-declared options) |
+| Single tap (while UNDO window is open) | Fire the undo closure of the last action |
 | Glasses double tap | System exit dialog (Even convention — never override) |
 | Ring double tap (detail) | Non-destructive back to dashboard |
-| Ring double tap (dashboard) | Exit app |
+| Ring double tap (dashboard) | **Open the card-selector modal** (jump to any card in the carousel) |
 | Swipe up/down (dashboard) | Prev/next card |
 | Swipe up/down (detail, item-paginated card) | Prev/next item within card |
 | Swipe up/down (detail, non-paginated) | Prev/next card |
-| Picker: list-tap an option | Execute the chosen action, flash result, return to dashboard |
-| Picker: double-tap | Cancel picker (stay in detail view) |
+| Picker: list-tap an option | Execute the chosen action, flash result (with optional UNDO window), return to dashboard |
+| Picker: double-tap | Cancel picker (stay in detail view / same card) |
 
-Ring-tap and glasses-tap are treated identically for the single-tap primary action; source only matters for the double-tap (ring-double = back, glasses-double = exit).
+Ring-tap and glasses-tap are treated identically for the single-tap primary action; source only matters for the double-tap (ring-double = back/card-selector, glasses-double = exit).
 
 Ring vs glasses is distinguished by `event.sysEvent.eventSource` (`TOUCH_EVENT_FROM_RING = 2`, glasses = 1 or 3). See `src/even.ts:classifySource`.
 
@@ -81,7 +93,7 @@ Heartbeat (10s) re-renders to prevent firmware display sleep. No heartbeat = dis
 | Service | Port | Where | Purpose |
 |---|---|---|---|
 | widget_api | 8780 | `~/ai-agents/duck-ops/runtime/widget_api.py` | Duck Ops read + `POST /approvals/approve` |
-| phils-bridge | 8790 | `~/ai-agents/phils-bridge/server.py` | Calendar, Tasks, Gmail, GitHub, Now Playing, iMessages, `POST /tasks/complete` |
+| phils-bridge | 8790 | `~/ai-agents/phils-bridge/server.py` | Calendar, Tasks, Gmail, GitHub, Now Playing, iMessages. Write routes: `POST /tasks/complete`, `POST /tasks/skip`, `POST /tasks/uncomplete` (undo complete), `POST /tasks/unskip` (undo skip). |
 | Vite dev | 5174 | this repo | Hot-reload dev |
 
 **All LAN-only, no auth.** Before ANY non-LAN exposure (Tailscale, tunnel, public deploy): add bearer-token auth to the POST endpoints. User explicitly chose this trust model — see memory `feedback_duckops_widget_auth`.

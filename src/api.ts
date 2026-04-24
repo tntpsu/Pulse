@@ -476,6 +476,47 @@ export async function completeTask(
   }
 }
 
+export async function uncompleteTask(
+  listId: string,
+  taskId: string,
+): Promise<CompleteTaskResult> {
+  if (!BRIDGE_URL) return { ok: false, error: 'bridge not set' }
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), 8000)
+  try {
+    const response = await fetch(`${BRIDGE_URL}/tasks/uncomplete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ listId, taskId, confirm: true }),
+      signal: controller.signal,
+    })
+    return (await response.json()) as CompleteTaskResult
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
+export async function unskipTask(taskId: string): Promise<SkipTaskResult> {
+  if (!BRIDGE_URL) return { ok: false, error: 'bridge not set' }
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), 8000)
+  try {
+    const response = await fetch(`${BRIDGE_URL}/tasks/unskip`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ taskId, confirm: true }),
+      signal: controller.signal,
+    })
+    return (await response.json()) as SkipTaskResult
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 export interface ApproveResult {
   ok: boolean
   error?: string

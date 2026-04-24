@@ -1,7 +1,7 @@
 import { approveCandidate, loadDuckOps, rejectCandidate } from '../api'
 import type { DuckOpsPendingApproval, DuckOpsStatus } from '../types'
 import { formatError, formatLoading } from './_shared'
-import type { CardDefinition } from './_types'
+import type { CardDefinition, PickerOption } from './_types'
 
 function format(data: unknown, error: string | null): string {
   const title = 'DUCK POSTS'
@@ -38,9 +38,54 @@ function formatItem(item: unknown, index: number, total: number): string {
     `${a.title}`,
     '',
     preview,
-    '',
-    'Ring: arm APPROVE | swipe: switch to REJECT',
   ].join('\n')
+}
+
+function approvalActions(item: unknown): PickerOption[] {
+  const a = item as DuckOpsPendingApproval
+  const shortTitle = a.title.length > 40 ? `${a.title.slice(0, 40)}...` : a.title
+  return [
+    {
+      // DRY RUN intentionally listed FIRST to nudge the user to preview before
+      // firing. No undo because it's read-only: nothing to reverse.
+      label: 'DRY RUN',
+      run: async () => {
+        const r = await approveCandidate(a.artifactId, { dryRun: true })
+        return {
+          ok: r.ok,
+          message: r.ok
+            ? `DRY RUN OK: ${shortTitle}\n(no email sent)`
+            : `DRY RUN FAILED: ${r.error?.slice(0, 60) ?? 'unknown'}`,
+        }
+      },
+    },
+    {
+      // No undo on live approve — the outbound email has already sent by the
+      // time this resolves. The DRY RUN option above exists to compensate.
+      label: 'APPROVE',
+      run: async () => {
+        const r = await approveCandidate(a.artifactId)
+        return {
+          ok: r.ok,
+          message: r.ok
+            ? `APPROVED: ${shortTitle}`
+            : `FAILED: ${r.error?.slice(0, 60) ?? 'unknown'}`,
+        }
+      },
+    },
+    {
+      label: 'REJECT',
+      run: async () => {
+        const r = await rejectCandidate(a.artifactId)
+        return {
+          ok: r.ok,
+          message: r.ok
+            ? `REJECTED: ${shortTitle}`
+            : `FAILED: ${r.error?.slice(0, 60) ?? 'unknown'}`,
+        }
+      },
+    },
+  ]
 }
 
 export const duckOpsApprovalsCard: CardDefinition = {
@@ -52,32 +97,5 @@ export const duckOpsApprovalsCard: CardDefinition = {
   formatDetail,
   getItems: data => (data as DuckOpsStatus).pendingApprovals,
   formatItem,
-  confirmPrompt: item => {
-    const a = item as DuckOpsPendingApproval
-    return `APPROVE: ${a.title}\nRing-tap again to confirm`
-  },
-  confirmAction: async item => {
-    const a = item as DuckOpsPendingApproval
-    const result = await approveCandidate(a.artifactId)
-    return {
-      ok: result.ok,
-      message: result.ok
-        ? `APPROVED: ${a.title}`
-        : `FAILED: ${result.error?.slice(0, 60) ?? 'unknown'}`,
-    }
-  },
-  rejectPrompt: item => {
-    const a = item as DuckOpsPendingApproval
-    return `REJECT: ${a.title}\nRing-tap again to confirm`
-  },
-  rejectAction: async item => {
-    const a = item as DuckOpsPendingApproval
-    const result = await rejectCandidate(a.artifactId)
-    return {
-      ok: result.ok,
-      message: result.ok
-        ? `REJECTED: ${a.title}`
-        : `FAILED: ${result.error?.slice(0, 60) ?? 'unknown'}`,
-    }
-  },
+  getActions: approvalActions,
 }

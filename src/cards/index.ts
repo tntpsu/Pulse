@@ -20,11 +20,13 @@ import { gmailCard } from './gmail'
 import { nowPlayingCard } from './now-playing'
 import { sportsCard } from './sports'
 import { tasksCard } from './tasks'
+import { todayCard } from './today'
 import type { CardDefinition } from './_types'
 
-export type { ActionResult, CardDefinition } from './_types'
+export type { ActionResult, CardDefinition, PickerOption } from './_types'
 
 export const CARDS: CardDefinition[] = [
+  todayCard,
   sportsCard,
   duckOpsSalesCard,
   duckOpsPackQueueCard,

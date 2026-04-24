@@ -1,7 +1,7 @@
-import { completeTask, loadTasks, skipTask } from '../api'
+import { completeTask, loadTasks, skipTask, uncompleteTask, unskipTask } from '../api'
 import type { FlatTask, TasksSnapshot } from '../types'
 import { formatError, formatLoading } from './_shared'
-import type { CardDefinition } from './_types'
+import type { CardDefinition, PickerOption } from './_types'
 
 // Only show tasks from the MyJeepDuck list — that's where customer custom-build
 // asks live. The other Google Tasks lists (Default, Long Reminders) aren't
@@ -63,9 +63,55 @@ function formatItem(item: unknown, index: number, total: number): string {
     t.title,
     '',
     due,
-    '',
-    'Swipe to choose COMPLETE or SKIP, ring to confirm',
   ].join('\n')
+}
+
+function taskActions(item: unknown): PickerOption[] {
+  const t = item as FlatTask
+  const shortTitle = t.title.length > 40 ? `${t.title.slice(0, 40)}...` : t.title
+  return [
+    {
+      label: 'COMPLETE',
+      run: async () => {
+        const r = await completeTask(t.listId, t.taskId)
+        return {
+          ok: r.ok,
+          message: r.ok ? `DONE: ${shortTitle}` : `FAILED: ${r.error?.slice(0, 60) ?? 'unknown'}`,
+        }
+      },
+      undo: async () => {
+        const r = await uncompleteTask(t.listId, t.taskId)
+        return {
+          ok: r.ok,
+          message: r.ok ? shortTitle : r.error?.slice(0, 60) ?? 'unknown',
+        }
+      },
+    },
+    {
+      label: 'SKIP 7 DAYS',
+      run: async () => {
+        const r = await skipTask(t.taskId)
+        return {
+          ok: r.ok,
+          message: r.ok ? `SKIPPED 7d: ${shortTitle}` : `FAILED: ${r.error?.slice(0, 60) ?? 'unknown'}`,
+        }
+      },
+      undo: async () => {
+        const r = await unskipTask(t.taskId)
+        return {
+          ok: r.ok,
+          message: r.ok ? shortTitle : r.error?.slice(0, 60) ?? 'unknown',
+        }
+      },
+    },
+    {
+      label: 'SHOW LIST',
+      run: async () => ({
+        ok: true,
+        message: `List: ${t.listTitle}\n(use phone Tasks app to edit)`,
+      }),
+    },
+  ]
 }
 
 export const tasksCard: CardDefinition = {
@@ -77,34 +123,5 @@ export const tasksCard: CardDefinition = {
   formatDetail,
   getItems: data => flatten(data as TasksSnapshot),
   formatItem,
-  confirmLabel: 'COMPLETE',
-  rejectLabel: 'SKIP',
-  confirmPrompt: item => {
-    const t = item as FlatTask
-    return `COMPLETE: ${t.title}\nRing-tap again to confirm`
-  },
-  confirmAction: async item => {
-    const t = item as FlatTask
-    const result = await completeTask(t.listId, t.taskId)
-    return {
-      ok: result.ok,
-      message: result.ok
-        ? `DONE: ${t.title}`
-        : `FAILED: ${result.error?.slice(0, 60) ?? 'unknown'}`,
-    }
-  },
-  rejectPrompt: item => {
-    const t = item as FlatTask
-    return `SKIP: ${t.title} (hidden 7d)\nRing-tap again to confirm`
-  },
-  rejectAction: async item => {
-    const t = item as FlatTask
-    const result = await skipTask(t.taskId)
-    return {
-      ok: result.ok,
-      message: result.ok
-        ? `SKIPPED: ${t.title}`
-        : `FAILED: ${result.error?.slice(0, 60) ?? 'unknown'}`,
-    }
-  },
+  getActions: taskActions,
 }

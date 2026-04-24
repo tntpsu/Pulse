@@ -3,6 +3,16 @@ export interface ActionResult {
   message: string
 }
 
+// Picker option surfaced in the full-screen action modal. `run` is a zero-arg
+// closure so cards can capture the item they know about. `undo` is optional;
+// when present, the app flashes an UNDO prompt for UNDO_WINDOW_MS after a
+// successful run and calls `undo()` if the user taps within that window.
+export interface PickerOption {
+  label: string
+  run: () => Promise<ActionResult>
+  undo?: () => Promise<ActionResult>
+}
+
 export interface CardDefinition {
   id: string
   title: string
@@ -11,17 +21,18 @@ export interface CardDefinition {
   format: (data: unknown, error: string | null) => string
   formatDetail?: (data: unknown, error: string | null) => string
   // Item-paginated detail: when present, detail mode pages through items
-  // via swipes, and ring-tap (after a confirm tap) calls confirmAction.
+  // via swipes and tap on an actionable item opens the picker modal.
   getItems?: (data: unknown) => unknown[]
   formatItem?: (item: unknown, index: number, total: number) => string
+  // Simple actions: main.ts synthesizes a two-option picker (confirm / reject).
+  // For richer flows (3+ options, undo, etc.) implement getActions instead.
   confirmAction?: (item: unknown) => Promise<ActionResult>
   confirmPrompt?: (item: unknown) => string
-  // Optional secondary action — when set, a swipe while ARMED switches the
-  // staged action between approve and reject; second ring-tap executes it.
   rejectAction?: (item: unknown) => Promise<ActionResult>
   rejectPrompt?: (item: unknown) => string
-  // Display labels for the dual-action selector (defaults: APPROVE / REJECT).
-  // Tasks override these to "COMPLETE" / "SKIP".
   confirmLabel?: string
   rejectLabel?: string
+  // Override the synthesized two-option picker with a fully custom action list.
+  // When present, confirmAction / rejectAction are ignored.
+  getActions?: (item: unknown) => PickerOption[]
 }
