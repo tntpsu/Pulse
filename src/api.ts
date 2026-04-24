@@ -196,7 +196,6 @@ interface EspnNewsResponse {
 }
 
 const ESPN_NEWS_CACHE_MS = 5 * 60_000
-const espnNewsCache = new Map<string, { fetchedAt: number; data: EspnArticle | null }>()
 
 export interface EspnScheduleSummary {
   last: {
@@ -323,21 +322,31 @@ export async function loadEspnTeamSchedule(cfg: EspnTeamConfig): Promise<EspnSch
 }
 
 export async function loadEspnTeamNews(cfg: EspnTeamConfig): Promise<EspnArticle | null> {
-  const key = `${cfg.league}:${cfg.teamId}`
-  const cached = espnNewsCache.get(key)
+  const list = await loadEspnTeamNewsList(cfg, 1)
+  return list[0] ?? null
+}
+
+const espnNewsListCache = new Map<string, { fetchedAt: number; data: EspnArticle[] }>()
+
+export async function loadEspnTeamNewsList(
+  cfg: EspnTeamConfig,
+  limit = 5,
+): Promise<EspnArticle[]> {
+  const key = `${cfg.league}:${cfg.teamId}:${limit}`
+  const cached = espnNewsListCache.get(key)
   if (cached && Date.now() - cached.fetchedAt < ESPN_NEWS_CACHE_MS) return cached.data
-  const url = `https://site.api.espn.com/apis/site/v2/sports/${cfg.league}/news?team=${cfg.teamId}&limit=1`
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${cfg.league}/news?team=${cfg.teamId}&limit=${limit}`
   const payload = await fetchJson<EspnNewsResponse>(url)
-  const first = payload.articles?.[0]
-  const article: EspnArticle | null = first?.headline
-    ? {
-        headline: first.headline,
-        description: first.description,
-        published: first.published,
-      }
-    : null
-  espnNewsCache.set(key, { fetchedAt: Date.now(), data: article })
-  return article
+  const articles: EspnArticle[] = (payload.articles ?? [])
+    .filter(a => !!a.headline)
+    .slice(0, limit)
+    .map(a => ({
+      headline: a.headline!,
+      description: a.description,
+      published: a.published,
+    }))
+  espnNewsListCache.set(key, { fetchedAt: Date.now(), data: articles })
+  return articles
 }
 
 export async function loadEspnGame(cfg: EspnTeamConfig): Promise<SportsGameSnapshot> {
@@ -426,6 +435,36 @@ export async function loadGmailUnread(): Promise<GmailUnreadSnapshot> {
 export async function loadNowPlaying(): Promise<NowPlayingSnapshot> {
   if (!BRIDGE_URL) return { status: 'ok', playing: false }
   return fetchJson<NowPlayingSnapshot>(`${BRIDGE_URL}/now-playing.json`, 4000)
+}
+
+export interface ServiceHealth {
+  bridge: boolean
+  widget: boolean
+}
+
+async function probeOne(url: string, timeoutMs = 2000): Promise<boolean> {
+  if (!url) return false
+  const ctrl = new AbortController()
+  const timer = window.setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const resp = await fetch(url, { signal: ctrl.signal, cache: 'no-store' })
+    return resp.ok
+  } catch {
+    return false
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
+export async function probeServiceHealth(): Promise<ServiceHealth> {
+  // Widget_api uses /healthz too; derive by swapping the widget-status.json tail.
+  const widgetHealth = DUCK_OPS_URL.replace(/widget-status\.json$/, 'healthz')
+  const bridgeHealth = BRIDGE_URL ? `${BRIDGE_URL}/healthz` : ''
+  const [bridge, widget] = await Promise.all([
+    probeOne(bridgeHealth),
+    probeOne(widgetHealth),
+  ])
+  return { bridge, widget }
 }
 
 export interface SkipTaskResult {

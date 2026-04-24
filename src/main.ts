@@ -1,12 +1,13 @@
 import './style.css'
 
-import { loadWeather, staleAgeLabel } from './api'
+import { loadWeather, probeServiceHealth, staleAgeLabel, type ServiceHealth } from './api'
 import { CARDS, type ActionResult, type CardDefinition, type PickerOption } from './cards/index'
 import { connectEvenRuntime, type InputSource } from './even'
 import type { TodaySnapshot } from './cards/today'
 import type { WeatherSnapshot } from './types'
 
 const WEATHER_POLL_MS = 600_000
+const HEALTH_POLL_MS = 60_000
 // Tick often enough to catch the minute boundary without drift, but the
 // actual BLE write only fires when the minute changes — see CLOCK paint guard.
 const CLOCK_TICK_MS = 15_000
@@ -84,6 +85,9 @@ const cardStates: Map<string, CardState> = new Map(
 
 let weather: WeatherSnapshot | null = null
 let weatherError: string | null = null
+// null on startup until first probe completes; after that it reflects the
+// most recent status.
+let serviceHealth: ServiceHealth | null = null
 let currentCardIndex = 0
 let viewMode: ViewMode = 'dashboard'
 let currentItemIndex = 0
@@ -170,45 +174,44 @@ function formatLeft(): string {
       ? `weather: ${weatherError.slice(0, 30)}`
       : 'weather: ...'
   const badges = formatAttentionBadges()
-  const health = formatBridgeHealth()
+  const health = formatServiceHealth()
   const lines = [`${h12}:${minutes} ${period}`, dateLine, '', tempLine]
   if (badges) lines.push('', badges)
-  if (health) lines.push(health)
+  if (health) lines.push('', health)
   return lines.join('\n')
 }
 
-// Reads the already-loaded Today card state to surface non-zero counts.
-// Keeps the coupling weak: if Today hasn't loaded yet, badges stay silent.
+// Symbol legend — kept here so future readers see what each glyph means:
+//   ★ approvals · ■ tasks · ▼ stuck shipments · ▶ PRs to review
+//   ● unread mail · ! CI failing
+// All symbols are from the design-guidelines verified-safe set so they
+// render reliably on the G2 LVGL firmware font.
 function formatAttentionBadges(): string {
   const todayState = cardStates.get('today')
   const data = todayState?.data as TodaySnapshot | null
   if (!data) return ''
   const pairs: string[] = []
-  if (data.approvals && data.approvals > 0) pairs.push(`${data.approvals} apr`)
-  if (data.tasks && data.tasks > 0) pairs.push(`${data.tasks} tsk`)
-  if (data.stuck && data.stuck > 0) pairs.push(`${data.stuck} stk`)
-  if (data.prs && data.prs > 0) pairs.push(`${data.prs} PR`)
-  if (data.unread && data.unread > 0) pairs.push(`${data.unread} mail`)
-  if (data.ciFailing && data.ciFailing > 0) pairs.push(`CI!`)
+  if (data.approvals && data.approvals > 0) pairs.push(`★${data.approvals}`)
+  if (data.tasks && data.tasks > 0) pairs.push(`■${data.tasks}`)
+  if (data.stuck && data.stuck > 0) pairs.push(`▼${data.stuck}`)
+  if (data.prs && data.prs > 0) pairs.push(`▶${data.prs}`)
+  if (data.unread && data.unread > 0) pairs.push(`●${data.unread}`)
+  if (data.ciFailing && data.ciFailing > 0) pairs.push(`!CI`)
   if (pairs.length === 0) return ''
-  // Fit 2 per line on the 240px left column — more is unreadable.
+  // Fit ~3 per line on the 240px left column.
   const lines: string[] = []
-  for (let i = 0; i < pairs.length; i += 2) {
-    lines.push(pairs.slice(i, i + 2).join('  '))
+  for (let i = 0; i < pairs.length; i += 3) {
+    lines.push(pairs.slice(i, i + 3).join(' '))
   }
   return lines.join('\n')
 }
 
-// Counts cards in error state. More than a couple → likely bridge is down.
-function formatBridgeHealth(): string {
-  let errored = 0
-  let total = 0
-  for (const state of cardStates.values()) {
-    total += 1
-    if (state.error) errored += 1
-  }
-  if (errored >= 3 && total > 0) return `!! ${errored}/${total} cards err`
-  return ''
+// Health icons for the two backend services. ● = healthy, ○ = unreachable.
+function formatServiceHealth(): string {
+  if (!serviceHealth) return 'bridge ·  widget ·'
+  const b = serviceHealth.bridge ? '●' : '○'
+  const w = serviceHealth.widget ? '●' : '○'
+  return `bridge ${b}  widget ${w}`
 }
 
 function currentCard(): CardDefinition {
@@ -378,6 +381,18 @@ async function flashTransient(text: string, durationMs: number): Promise<void> {
 
 async function handlePrimaryTap(): Promise<void> {
   markActive()
+  // Tap-to-dismiss: when a long-form transient is showing (e.g. a sports
+  // article body), a tap dismisses it without re-opening the picker.
+  // Undo window takes precedence (handled below).
+  if (transientMessage !== null && !pendingUndo) {
+    if (transientTimer !== null) {
+      window.clearTimeout(transientTimer)
+      transientTimer = null
+    }
+    transientMessage = null
+    await paint()
+    return
+  }
   // If an undo window is open, consume the tap as "undo" rather than opening
   // the picker again. Only taps within the window count.
   if (pendingUndo && Date.now() < pendingUndo.expiresAt) {
@@ -451,11 +466,19 @@ async function handlePrimaryTap(): Promise<void> {
       }
       // If pendingUndo is null, the tap handler already took over.
     } else {
-      await flashTransient(result.message, 1500)
-      await fetchCard(card)
-      currentItemIndex = 0
-      viewMode = 'dashboard'
-      await paint()
+      // Longer flash for multi-paragraph content (e.g. sports article body);
+      // a tap dismisses it early.
+      const flashMs = result.message.length > 80 ? 30_000 : 1500
+      await flashTransient(result.message, flashMs)
+      // Only return to dashboard for short success flashes. Long-form reads
+      // stay on the current card so a tap-to-dismiss leaves the user where
+      // they were.
+      if (flashMs === 1500) {
+        await fetchCard(card)
+        currentItemIndex = 0
+        viewMode = 'dashboard'
+        await paint()
+      }
     }
   } finally {
     pickerOpen = false
@@ -468,6 +491,15 @@ async function refreshWeather(): Promise<void> {
     weatherError = null
   } catch (err) {
     weatherError = err instanceof Error ? err.message : String(err)
+  }
+  if (viewMode === 'dashboard') await paint()
+}
+
+async function refreshServiceHealth(): Promise<void> {
+  try {
+    serviceHealth = await probeServiceHealth()
+  } catch {
+    serviceHealth = { bridge: false, widget: false }
   }
   if (viewMode === 'dashboard') await paint()
 }
@@ -489,6 +521,7 @@ const even = await connectEvenRuntime(initialLeft, initialRight)
 
 await paint()
 void refreshWeather()
+void refreshServiceHealth()
 void refreshActiveCard()
 
 // Only paint on the clock tick if the displayed minute actually changed.
@@ -503,6 +536,7 @@ window.setInterval(() => {
   }
 }, CLOCK_TICK_MS)
 window.setInterval(() => void refreshWeather(), WEATHER_POLL_MS)
+window.setInterval(() => void refreshServiceHealth(), HEALTH_POLL_MS)
 
 if (even) {
   ui.note.textContent =
@@ -537,6 +571,7 @@ if (even) {
   even.onForeground(() => {
     markActive()
     void refreshWeather()
+    void refreshServiceHealth()
     void refreshActiveCard()
   })
   startActiveCardPoll()

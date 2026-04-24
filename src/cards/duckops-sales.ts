@@ -13,8 +13,11 @@ const ZERO_TRENDS: DuckOpsSalesTrends = {
   source: 'etsy',
 }
 
+// Prior=0 intentionally shows an absolute delta rather than a percentage,
+// because "+400%" off a single-unit base is more misleading than "+4u (from 0)".
+// User flagged the older "+new" shorthand as unclear.
 function pct(current: number, prior: number): string {
-  if (prior <= 0) return current > 0 ? '+new' : 'flat'
+  if (prior <= 0) return current > 0 ? `+${current}u (from 0)` : 'flat'
   const change = ((current - prior) / prior) * 100
   const rounded = Math.round(change)
   if (rounded === 0) return 'flat'

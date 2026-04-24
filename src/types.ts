@@ -45,6 +45,7 @@ export interface DuckOpsWeeklyInsights {
   lastWeekUnits: number
   weekOverWeekPct: number | null
   bestSellerThisWeek: { title: string; units: number } | null
+  topSellersThisWeek?: Array<{ title: string; units: number }>
   avgUnitsPerOrderToday: number
   todayOrders: number
   unsoldInWindow: {
@@ -179,6 +180,9 @@ export interface TaskItem {
   id: string
   title: string
   dueLabel: string
+  // "Added" proxy derived from Google Tasks' `updated` field (the public API
+  // doesn't expose `created`). For unmodified tasks this equals add time.
+  updatedLabel?: string
 }
 
 export interface TaskList {
@@ -200,6 +204,7 @@ export interface FlatTask {
   taskId: string
   title: string
   dueLabel: string
+  updatedLabel?: string
 }
 
 export interface GmailUnreadItem {

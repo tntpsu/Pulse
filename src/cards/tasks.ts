@@ -19,6 +19,7 @@ function flatten(snap: TasksSnapshot): FlatTask[] {
         taskId: t.id,
         title: t.title,
         dueLabel: t.dueLabel,
+        updatedLabel: t.updatedLabel,
       })
     }
   }
@@ -57,12 +58,14 @@ function formatDetail(data: unknown, error: string | null): string {
 function formatItem(item: unknown, index: number, total: number): string {
   const t = item as FlatTask
   const due = t.dueLabel ? `Due: ${t.dueLabel}` : 'No due date'
+  const added = t.updatedLabel ? `Added: ${t.updatedLabel}` : ''
+  const metaLine = added ? `${due}   ${added}` : due
   return [
     `DUCK TASK ${index + 1}/${total}`,
     '',
     t.title,
     '',
-    due,
+    metaLine,
   ].join('\n')
 }
 

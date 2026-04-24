@@ -1,12 +1,12 @@
 import {
-  loadEspnTeamNews,
+  loadEspnTeamNewsList,
   loadEspnTeamSchedule,
   type EspnArticle,
   type EspnScheduleSummary,
   type EspnTeamConfig,
 } from '../api'
 import { formatError, formatLoading } from './_shared'
-import type { CardDefinition } from './_types'
+import type { CardDefinition, PickerOption } from './_types'
 
 interface TeamConfig {
   displayName: string
@@ -18,7 +18,7 @@ interface TeamSnapshot {
   displayName: string
   short: string
   schedule: EspnScheduleSummary
-  article: EspnArticle | null
+  articles: EspnArticle[]
 }
 
 interface SportsSnapshot {
@@ -35,11 +35,11 @@ const TEAMS: TeamConfig[] = [
 const EMPTY_SCHEDULE: EspnScheduleSummary = { last: null, next: null }
 
 async function loadOneTeam(t: TeamConfig): Promise<TeamSnapshot> {
-  const [schedule, article] = await Promise.all([
+  const [schedule, articles] = await Promise.all([
     loadEspnTeamSchedule(t.cfg).catch(() => EMPTY_SCHEDULE),
-    loadEspnTeamNews(t.cfg).catch(() => null),
+    loadEspnTeamNewsList(t.cfg, 5).catch(() => [] as EspnArticle[]),
   ])
-  return { displayName: t.displayName, short: t.short, schedule, article }
+  return { displayName: t.displayName, short: t.short, schedule, articles }
 }
 
 async function loadSports(): Promise<SportsSnapshot> {
@@ -108,10 +108,28 @@ function formatItem(item: unknown, index: number, total: number): string {
   } else {
     lines.push('Next: no scheduled game')
   }
-  if (t.article) {
-    lines.push('', '-- ESPN --', t.article.headline)
+  if (t.articles.length > 0) {
+    lines.push('', `-- ESPN (${t.articles.length}) --`)
+    lines.push(t.articles[0]!.headline.slice(0, 60))
   }
   return lines.join('\n')
+}
+
+function teamArticleActions(item: unknown): PickerOption[] {
+  const t = item as TeamSnapshot
+  if (t.articles.length === 0) return []
+  return t.articles.slice(0, 5).map((article, i) => ({
+    // Short-title the headline so the picker list fits; full text goes in run().
+    label: `${i + 1}. ${article.headline.slice(0, 48)}`,
+    run: async () => {
+      const body = article.description?.trim() || '(no description available)'
+      const published = article.published ? `\n\n— ${article.published.slice(0, 10)}` : ''
+      return {
+        ok: true,
+        message: `${article.headline}\n\n${body}${published}`,
+      }
+    },
+  }))
 }
 
 export const sportsCard: CardDefinition = {
@@ -122,4 +140,7 @@ export const sportsCard: CardDefinition = {
   format,
   getItems: data => (data as SportsSnapshot).teams,
   formatItem,
+  // Each team's picker lists its recent articles; selecting one shows the
+  // full article body as a (dismissable) transient.
+  getActions: teamArticleActions,
 }
