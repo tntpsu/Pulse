@@ -13,9 +13,15 @@ These need you, not me — I cannot complete them from inside the sandbox.
 
 | Action | Why | Command |
 |---|---|---|
+| Create `com.philtullai.pulse` project on Even portal + upload `pulse.ehpk` | Renamed from "Phils Home" → "Pulse" this session; package_id changed, so the next sideload is a new app, not an update of the old `philshome` slot. Old install will coexist until manually removed. | manual upload at https://hub.evenrealities.com/application |
+| Upload new `lyrics-glow.ehpk` (v0.2.0) | Auto-detect mode shipped; package_id unchanged so this is a normal version bump on the existing slot | manual upload at portal |
+| Append `GITHUB_TOKEN` + `GITHUB_REPOS` to `~/ai-agents/phils-bridge/.env` then restart bridge | Activates the github-prs and github-ci cards on Pulse — currently stuck on "no repos configured" | `echo "GITHUB_TOKEN=$(gh auth token)" >> ~/ai-agents/phils-bridge/.env; echo "GITHUB_REPOS=tntpsu/Pulse,tntpsu/Cue,tntpsu/Glance,tntpsu/lyrics-glow,tntpsu/av,tntpsu/duckAgent" >> ~/ai-agents/phils-bridge/.env; launchctl kickstart -k gui/$(id -u)/<bridge-launchd-label>` |
+| Deploy Cue Cloudflare Worker (real-mode STT + LLM) | One-time setup so Cue stops running in mock mode. OpenAI key works fine — no Anthropic required. Walkthrough in chat/Cue README. | `cd ~/Documents/Cue/worker-template && npm install && npx wrangler login && npx wrangler secret put SHARED_SECRET DEEPGRAM_API_KEY OPENAI_API_KEY && npx wrangler deploy` |
 | Restart `widget_api` | Pick up the rejection-stable-key fix and the top-3-sellers field added in the duck-ops repo | `launchctl kickstart -k "gui/$(id -u)/com.philtullai.duck-ops-widget"` |
 | Re-run Google OAuth | Current refresh token predates the `gmail.readonly` scope being added to `oauth_setup.py`. Without this, the Gmail card shows "unconfigured" | `python3 ~/ai-agents/phils-bridge/oauth_setup.py` then re-restart phils-bridge |
 | Commit duck-ops changes | `runtime/operator_interface_contracts.py` has the rejection + top-3-sellers patch; sits alongside your in-flight `etsy_browser_batch` work | Commit when convenient |
+| Decide on av PR #1 | Three commits stacked: runbook catch-up, perf-test CI skips, ground-contact attribution fix. CI re-running. Two pre-existing logic failures: `test_no_oscillation_at_q4` MPC delay-comp test still failing (left untouched — needs deeper context). | Review + merge or request changes at https://github.com/tntpsu/av/pull/1 |
+| Spotify dev app (for Lyrics Glow v0.3) | Lyrics Glow v0.2 only catches Mac-side desktop music. Phone music auto-detect needs Spotify Web API + OAuth. Create dev app at https://developer.spotify.com (free, ~5 min) → paste client_id + secret + run an OAuth helper to get a refresh token. | Create app at developer.spotify.com → tell me when done |
 
 ---
 
@@ -37,6 +43,19 @@ These need you, not me — I cannot complete them from inside the sandbox.
 - **NewsAPI / Bing News**: free tiers are too thin (~100 req/day) for daily use
 
 **Decision:** keep showing summaries with `(summary)` label and a `full: <url>` line so the user can finish reading on their phone. Revisit if image containers (below) ship and we want a "rich content viewer" pattern.
+
+---
+
+## Recently shipped (Pulse)
+
+Latest feedback batch (commit `5912231`):
+- **Weather card:** city name on top via `VITE_WEATHER_CITY` env var (changes alongside lat/lon when traveling so the header reflects the actual forecast location)
+- **New `scoreboard` card:** sport picker (NBA / NFL / NHL / MLB / NCAAF / NCAAB) using ESPN's free `/scoreboard` endpoint per league; item-paginated, swipe through leagues in detail view
+- **Trends card:** client-side filter strips IP-risk titles ("donald duck", "marvel", etc.) and sub-1500-score ideas before they reach the glasses. Source-pipeline improvement (in `business_operator_desk.py`) is a bigger separate project.
+- **Insights card:** removed the "Unsold (Nd): X" line per feedback — wasn't actionable
+- **Deploy automation scaffold:** `scripts/deploy-portal.mjs` (Playwright) + `npm run deploy:upload` / `deploy:full` scripts. Selectors are TODO comments needing one manual portal-inspection pass before it's fully autonomous. Investigated the Even Hub API first — extracted endpoints from the evenhub-cli binary, confirmed there is no public upload endpoint (CLI commands are init/login/qr/pack/self-check only), so Playwright is the practical path.
+
+Renamed app: **Phils Home → Pulse**. `package_id` changed `com.philtullai.philshome` → `com.philtullai.pulse` (treated as a new app by Even Hub — old install will coexist until uninstalled). All cross-repo references updated and committed in Cue / Glance / lyrics-glow / duck-ops / phils-bridge.
 
 ---
 
@@ -64,20 +83,21 @@ Technically possible. See **§ Plan: AudioControl + wake-word** below for what i
 
 These are NOT part of Pulse — each lives in its own repo with its own `package_id`. Listed here as related work.
 
-### 1. Lyrics Overlay ✅ BUILT v0.1.0 (manual song picker)
+### 1. Lyrics Overlay ✅ BUILT v0.2.0 (auto-detect Mac-side music)
 
-**Status:** sideload-ready as `lyrics-glow.ehpk` at `~/Documents/lyrics-glow/`. v0.1.0 ships the full karaoke renderer + LRCLIB lookup with a phone-side song picker; auto-detect via Spotify OAuth deferred to v0.2.0 (needs phone-side bridge).
+**Status:** sideload-ready as `lyrics-glow.ehpk` at `~/Documents/lyrics-glow/`. Auto-detect for Mac-side desktop music shipped via the existing phils-bridge `/now-playing.json` route (AppleScript polls Music + Spotify desktop apps). iPhone Spotify auto-detect deferred to v0.3 because it requires Spotify Web API OAuth.
 
 **What's shipped (cumulative):**
 - v0.1.0: scaffold + LRC parser (binary-search line picker, multi-stamp support, dedupe) + LRCLIB HTTP client + glasses 3-line karaoke window (prev / ▶ current / next / next+1) + tap-pause-resume + swipe-bias + offset slider + last-song memory + 23 vitest unit tests + 5/5 simulator smoke regression
+- v0.2.0: phils-bridge polling client + auto-detect mode toggle in phone settings + track-change detection + position-anchored karaoke clock + drift-correction (re-anchor when our clock and the Mac clock diverge >2s) + 10 new vitest cases (33/33 total) + bridge route extended to return `positionMs` + `durationMs`
 
-**Still queued for v0.2+:**
-- Spotify OAuth + auto-detect "now playing" via a new `~/ai-agents/lyrics-bridge/` Python service (~4h)
+**Still queued for v0.3+:**
+- **Spotify Web API + OAuth** so iPhone playback also auto-detects (~4h, needs you to create a Spotify dev app first)
 - Musixmatch fallback for tracks LRCLIB doesn't have (~2h)
 
 **Concept:** karaoke-through-glasses. Pulls currently-playing track + time-synced lyrics, scrolls them on the glasses in lockstep with the song.
 
-See **§ Plan: Lyrics Overlay** below for the original build spec (now partially realised).
+See **§ Plan: Lyrics Overlay** below for the original build spec (now substantially realised).
 
 ### 2. Live Captions ⭐ PRIORITY 2
 
@@ -90,6 +110,34 @@ See **§ Plan: Lyrics Overlay** below for the original build spec (now partially
 **Concept:** pre-loaded recipes that scroll one step at a time, advance via head-nod (IMU). Hands-free cooking.
 
 **Why third:** smaller audience than #1/#2, IMU gesture detection is finicky (most of the build time goes to tuning thresholds). See **§ Plan: Recipe Assistant** below.
+
+---
+
+## Ecosystem-aligned new app ideas (April 2026 survey)
+
+A scan of the existing Even Hub app store + GitHub community apps + Discord/Reddit wishlists turned up clear gaps. Ranked by `viral_demo_potential × inverse_effort`:
+
+| # | App | One-line | Effort | Why now |
+|---|---|---|---|---|
+| 1 | **Driving HUD nav** | Big arrows + distance for turn-by-turn from Mapbox/OSRM | medium (~12h) | Most-requested gap in long-term reviews (Tom's Guide, Trusted Reviews, Geeky Gadgets). 1P "Navigate" is weak; nobody has shipped a real third-party version. **Demo gold.** |
+| 2 | **Flashcards / Anki-on-glasses** | Spaced-rep with "knew it / didn't" via R1 single-tap | trivial (~4h) | Recurring HN suggestion; zero shipping competition. Format perfectly matches the 576×288 display. |
+| 3 | **Pomodoro / focus timer** | Glanceable countdown + smart breaks | trivial (~3h) | Gap on Hub today. The 36g all-day form factor is the perfect substrate. Different from EvenWorkout's countdown. |
+| 4 | **Quick-reply notifications (Android)** | iMessage-style triage glance + R1 reply | medium (~10h) | Reviewer #1 complaint: "smart glasses that actually let me reply." Pulse only shows unread; this would *act*. Android-first because iOS APIs are restrictive. |
+| 5 | **Live captions (passive)** | Always-on STT for in-person hearing assist | larger (~22h, see Plan in this doc) | Existing Live Captions plan in this roadmap; ecosystem confirms accessibility press would cover it. Cue handles coaching; this is passive. |
+| 6 | **Speaker pacing coach** | Teleprompter that says "you're 2 min over, slow 8%" | small (~6h) | Adjacent to 1P Teleprompt but with feedback. R1 click for beat marks. Conference-talk hero. |
+| 7 | **Sleep/meditation wind-down** | Calm-style scripted routine with timed text fades | small (~5h) | 1P Stillness is breathing-only. A scripted bedtime routine is a different surface. |
+| 8 | **Doorbell / home-cam alert** | Ring/Reolink webhook → "Front door: package" | small (~5h) | Zero competition. No camera frames needed — just text alerts. |
+| 9 | **Recipe step-through (hands-free)** | NYT Cooking / AllRecipes import + R1 next | small (~6h, but overlaps existing Recipe Assistant Plan in this doc) | EvenKitchen demo exists but isn't polished. Bigger competitive moat = hands-free voice "next." |
+| 10 | **Long-tail sports ticker** (F1 / MMA / tennis / golf) | Live event timeline + lap-by-lap | small (~4h, parallel to Pulse scoreboard card) | Lower viral ceiling but trivial. Could be a Pulse sub-card or standalone. |
+
+**Ones the survey says to AVOID** because they overlap our existing four apps: any dashboard/widget aggregator (Pulse), AI conversation coach (Cue), web reader (Glance), karaoke/lyrics (Lyrics Glow), now-playing display, GitHub PR view, Gmail unread.
+
+**Platform-direction notes worth knowing:**
+- Hub's roadmap is plugins → **widgets** → dashboard layouts → AI skills. Only plugins ship today; widget API is the next surface — early movers there will own real estate (per hub.evenrealities.com/docs).
+- No published revenue share or installed-base numbers as of April 2026 launch. Build for portfolio/audience, not store revenue (per Virtual Reality News critique).
+- Reverse-engineering track is alive (`i-soxi/even-g2-protocol`) — direct BLE bypass of Hub is technically possible if Even ever closes the gate.
+- Hardware constraints worth keeping in mind: no speaker (no audio-out apps), no camera (no CV), 4-mic array is BETTER than commenters realise, R1 ring is the only reliable rich-input vector.
+- **MentraOS** (mentraglass.com/os) is the cross-device alt platform some devs are hedging onto — worth a glance if you ever want one app to span multiple smart-glasses brands.
 
 ### 5. Cue — multi-mode conversation coach ✅ BUILT v0.2.0
 
@@ -106,6 +154,8 @@ See **§ Plan: Lyrics Overlay** below for the original build spec (now partially
 - Smarter transcript trimming (currently last 1200 chars rolling window)
 - Battery measurement + auto-pause after N min idle
 - Per-mode UI tweaks (line wrap, imperative verb emphasis)
+
+**LLM key:** worker accepts either `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` (gpt-4o-mini fallback). Anthropic isn't required — if you only have an OpenAI key (e.g. the one in `~/ai-agents/duckAgent/.env`), set just that and Cue runs fine.
 
 See **§ Plan: Cue (multi-mode conversation coach)** below for the original build spec.
 
