@@ -236,14 +236,18 @@ function formatServiceHealth(): string {
 }
 
 // Battery + wearing state from onDeviceStatusChanged. Renders nothing until
-// the first event arrives (avoids "0%" flicker on cold start).
+// we've seen a real, non-zero battery reading — the firmware appears to send
+// an initial zeroed payload (batteryLevel=0, isWearing=false) on first
+// connect, which would otherwise show " ▁ 0% ! ZZZ" while the user is
+// actively wearing the glasses. ZZZ also gated on a real reading.
 function formatDeviceLine(): string {
   const { batteryLevel, isCharging, isWearing } = deviceStatus
-  if (batteryLevel === undefined) return ''
-  // Map level → progress-bar glyph from the design-guide verified set.
+  if (batteryLevel === undefined || batteryLevel <= 0) return ''
   const bar = batteryGlyph(batteryLevel)
   const charge = isCharging ? '+' : ' '
   const lowFlag = batteryLevel <= 20 ? ' !' : ''
+  // ZZZ only when we have a real battery (proxy for "real status payload")
+  // AND wearing is explicitly false — initial false-default doesn't count.
   const wearFlag = isWearing === false ? '  ZZZ' : ''
   return `${charge}${bar} ${batteryLevel}%${lowFlag}${wearFlag}`
 }
