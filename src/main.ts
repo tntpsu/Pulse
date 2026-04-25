@@ -304,8 +304,11 @@ function formatCardOutput(): string {
       const base = card.formatItem(item, currentItemIndex, items.length)
       const options = pickerOptionsFor(card, item)
       if (options.length > 0) {
-        const labels = options.map(o => o.label).join(' / ')
-        return `${base}\n\n[tap] ${labels}`
+        // Vertical list reads better than slash-separated, especially for long
+        // labels like article headlines. Cap each label to one line.
+        const trunc = (l: string) => (l.length > 32 ? `${l.slice(0, 31)}…` : l)
+        const labelsBlock = options.map(o => `  ${trunc(o.label)}`).join('\n')
+        return `${base}\n\n[tap]\n${labelsBlock}`
       }
       return base
     }
@@ -629,6 +632,19 @@ if (even) {
     void changeCard(dir === 'down' ? +1 : -1)
   })
   even.onDoubleTap(source => {
+    // While a long-form transient is showing (e.g. an article body), any
+    // double-tap dismisses it — not what feels right is for glasses-2-tap
+    // to exit the app mid-read. Single-tap already dismisses; this just
+    // matches the same intent for double-tap.
+    if (transientMessage !== null && !pendingUndo) {
+      if (transientTimer !== null) {
+        window.clearTimeout(transientTimer)
+        transientTimer = null
+      }
+      transientMessage = null
+      void paint()
+      return
+    }
     if (source === 'ring') {
       // Ring 2-tap in detail → non-destructive back to dashboard.
       if (viewMode === 'detail') {

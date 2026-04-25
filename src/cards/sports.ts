@@ -81,36 +81,35 @@ function format(data: unknown, error: string | null): string {
 
 function formatItem(item: unknown, index: number, total: number): string {
   const t = item as TeamSnapshot
-  const header = `${t.displayName.toUpperCase()} (${index + 1}/${total})`
-  const lines: string[] = [header, '']
+  // Densified to fit the 336x288 right column without scrolling: each game
+  // collapses to one line, no blank lines between sections, no headline
+  // preview (the picker shows headlines anyway).
+  const lines: string[] = [`${t.displayName.toUpperCase()} ${index + 1}/${total}`]
   const l = t.schedule.last
   if (l) {
     const opp = l.opponentAbbrev ?? '???'
     const vs = l.homeAway === 'home' ? `vs ${opp}` : `@ ${opp}`
-    lines.push('Last:')
-    if (l.dateLabel) lines.push(`  ${l.dateLabel}  ${vs}`)
-    else lines.push(`  ${vs}`)
-    if (l.scoreSelf !== null && l.scoreOpponent !== null) {
-      lines.push(`  Score: ${t.displayName} ${l.scoreSelf} - ${l.scoreOpponent} ${opp}`)
-    }
-    if (l.resultLabel) lines.push(`  ${l.resultLabel}`)
+    const score =
+      l.scoreSelf !== null && l.scoreOpponent !== null
+        ? ` ${l.scoreSelf}-${l.scoreOpponent}`
+        : ''
+    const result = l.resultLabel ? ` ${l.resultLabel.slice(0, 6)}` : ''
+    const date = l.dateLabel ? ` ${l.dateLabel}` : ''
+    lines.push(`Last:${date} ${vs}${score}${result}`)
   } else {
-    lines.push('Last: no recent game')
+    lines.push('Last: —')
   }
-  lines.push('')
   const n = t.schedule.next
   if (n) {
     const opp = n.opponentAbbrev ?? '???'
     const vs = n.homeAway === 'home' ? `vs ${opp}` : `@ ${opp}`
-    lines.push('Next:')
-    lines.push(`  ${vs}`)
-    if (n.startsAtLabel) lines.push(`  ${n.startsAtLabel}`)
+    const when = n.startsAtLabel ? ` ${n.startsAtLabel}` : ''
+    lines.push(`Next: ${vs}${when}`)
   } else {
-    lines.push('Next: no scheduled game')
+    lines.push('Next: —')
   }
   if (t.articles.length > 0) {
-    lines.push('', `-- ESPN (${t.articles.length}) --`)
-    lines.push(t.articles[0]!.headline.slice(0, 60))
+    lines.push('', `${t.articles.length} ESPN articles`)
   }
   return lines.join('\n')
 }
@@ -122,11 +121,15 @@ function teamArticleActions(item: unknown): PickerOption[] {
     // Short-title the headline so the picker list fits; full text goes in run().
     label: `${i + 1}. ${article.headline.slice(0, 48)}`,
     run: async () => {
-      const body = article.description?.trim() || '(no description available)'
-      const published = article.published ? `\n\n— ${article.published.slice(0, 10)}` : ''
+      const body = article.description?.trim() || '(no summary available)'
+      const published = article.published ? `\n— ${article.published.slice(0, 10)}` : ''
+      // ESPN's `news` endpoint only ships short summaries; full article body
+      // lives at the URL below. Show it so the user can finish reading on
+      // their phone.
+      const linkLine = article.url ? `\n\nfull: ${article.url}` : ''
       return {
         ok: true,
-        message: `${article.headline}\n\n${body}${published}`,
+        message: `${article.headline}\n\n(summary)\n${body}${published}${linkLine}`,
       }
     },
   }))

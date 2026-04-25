@@ -185,6 +185,10 @@ export interface EspnArticle {
   headline: string
   description?: string
   published?: string
+  // URL to the full article on ESPN.com (read on phone). The free `news`
+  // endpoint only returns a 1-2 sentence `description`, so this URL is the
+  // only path to the full body without a server-side scraper.
+  url?: string
 }
 
 interface EspnNewsResponse {
@@ -192,6 +196,7 @@ interface EspnNewsResponse {
     headline?: string
     description?: string
     published?: string
+    links?: { web?: { href?: string } }
   }>
 }
 
@@ -344,6 +349,7 @@ export async function loadEspnTeamNewsList(
       headline: a.headline!,
       description: a.description,
       published: a.published,
+      url: a.links?.web?.href,
     }))
   espnNewsListCache.set(key, { fetchedAt: Date.now(), data: articles })
   return articles
