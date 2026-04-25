@@ -415,7 +415,9 @@ async function openCardSelector(): Promise<void> {
   try {
     // Prefix the current card with "> " so the user sees where they are.
     const labels = CARDS.map((c, i) => (i === currentCardIndex ? `> ${c.title}` : c.title))
-    const pickedIndex = await even.openPicker('Jump to card', labels)
+    // Header includes the running app version so the user can confirm at a
+    // glance that the install actually picked up the latest .ehpk.
+    const pickedIndex = await even.openPicker(`Jump to card · v${__APP_VERSION__}`, labels)
     if (pickedIndex === null) return // cancelled
     if (pickedIndex === currentCardIndex) return
     await jumpToCard(pickedIndex)
