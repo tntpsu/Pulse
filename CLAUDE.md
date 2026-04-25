@@ -86,7 +86,11 @@ Ring-tap and glasses-tap are treated identically for the single-tap primary acti
 
 Ring vs glasses is distinguished by `event.sysEvent.eventSource` (`TOUCH_EVENT_FROM_RING = 2`, glasses = 1 or 3). See `src/even.ts:classifySource`.
 
-Heartbeat (10s) re-renders to prevent firmware display sleep. No heartbeat = display goes dark after ~15s.
+**Display sleep** — there's no formal documentation of the firmware's display-sleep behavior (the "~15s no-update" rule used to be folklore in the comments and didn't match observed reality). What we DO know empirically:
+
+- Each `textContainerUpgrade` BLE write is read by the firmware as "the app is active, keep the display lit". Frequent writes = display never sleeps.
+- `onDeviceStatusChanged` fires more often than expected on real glasses (battery percent, charging, connection-keepalive). If you call `paint()` unconditionally inside that callback, the display stays lit forever — see `main.ts` device-status handler for the bucket+flip dedupe pattern. This was the root cause of v0.10.x display-stays-on bug.
+- Card polling intervals (60s+ for the shortest card) and the 60s service-health probe are too infrequent to keep the display continuously lit on their own.
 
 ## Running services (all on Mac mini at 10.168.168.105)
 

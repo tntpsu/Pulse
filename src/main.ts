@@ -682,16 +682,35 @@ if (even) {
     void refreshActiveCard()
   })
   even.onDeviceStatus(status => {
-    const wasWearing = deviceStatus.isWearing
+    const prev = deviceStatus
     deviceStatus = status
+    // Only re-paint on MEANINGFUL state changes — battery percent and
+    // charging-state ticks fire every few seconds on real glasses, and
+    // each paint() issues a textContainerUpgrade BLE write which the
+    // firmware sees as "the app is still active, keep the display lit".
+    // Without this guard the display never sleeps.
+    const wearingFlipped = prev.isWearing !== status.isWearing
+    const chargingFlipped = prev.isCharging !== status.isCharging
+    // Bucket battery into 10% steps so a typical hourly drain triggers
+    // at most ~10 repaints instead of one per percent.
+    const prevBucket =
+      prev.batteryLevel === undefined ? -1 : Math.floor(prev.batteryLevel / 10)
+    const nowBucket =
+      status.batteryLevel === undefined ? -1 : Math.floor(status.batteryLevel / 10)
+    const batteryStepped = prevBucket !== nowBucket
     // Put-them-on transition (false → true) is a perfect refresh trigger:
     // user just engaged, push the freshest data they should see first.
-    if (wasWearing === false && status.isWearing === true) {
+    if (prev.isWearing === false && status.isWearing === true) {
       markActive()
       void refreshActiveCard()
       void refreshServiceHealth()
     }
-    if (viewMode === 'dashboard') void paint()
+    if (
+      (wearingFlipped || chargingFlipped || batteryStepped) &&
+      viewMode === 'dashboard'
+    ) {
+      void paint()
+    }
   })
   // Honor launch source: when the user opened us via the GLASSES menu, jump
   // straight to the Today summary (index 0). When opened from the phone-app
