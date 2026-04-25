@@ -2,7 +2,12 @@ import './style.css'
 
 import { loadWeather, probeServiceHealth, staleAgeLabel, type ServiceHealth } from './api'
 import { CARDS, type ActionResult, type CardDefinition, type PickerOption } from './cards/index'
-import { connectEvenRuntime, type InputSource } from './even'
+import {
+  connectEvenRuntime,
+  type DeviceStatusSnapshot,
+  type InputSource,
+  type UserInfoSnapshot,
+} from './even'
 import type { TodaySnapshot } from './cards/today'
 import type { WeatherSnapshot } from './types'
 
@@ -88,33 +93,44 @@ let weatherError: string | null = null
 // null on startup until first probe completes; after that it reflects the
 // most recent status.
 let serviceHealth: ServiceHealth | null = null
+// Device + user state: populated by onDeviceStatusChanged / getUserInfo after
+// the bridge connects. Fallback to undefined fields → left column degrades
+// gracefully (battery line + greeting are conditional on a value being set).
+let deviceStatus: DeviceStatusSnapshot = {}
+let userInfo: UserInfoSnapshot = {}
 let currentCardIndex = 0
 let viewMode: ViewMode = 'dashboard'
 let currentItemIndex = 0
 
 // Persist the last-viewed card so OS-kills / relaunches don't dump the user
 // back on card 0. We persist by card ID (not index) because the CARDS array
-// may reorder across updates.
+// may reorder across updates. Reads/writes go through the SDK's native
+// companion-app storage (more durable than browser localStorage on iOS); a
+// browser-localStorage path is kept for the dev-server preview where there's
+// no bridge.
 const PERSIST_KEY = 'phils-home:state:v1'
-function loadPersistedState(): { cardId?: string } {
+async function loadPersistedState(): Promise<{ cardId?: string }> {
   try {
-    const raw = window.localStorage.getItem(PERSIST_KEY)
-    return raw ? (JSON.parse(raw) as { cardId?: string }) : {}
+    const raw = even
+      ? await even.getStorage(PERSIST_KEY)
+      : window.localStorage.getItem(PERSIST_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw) as { cardId?: string }
   } catch {
     return {}
   }
 }
 function persistState(): void {
-  try {
-    window.localStorage.setItem(PERSIST_KEY, JSON.stringify({ cardId: CARDS[currentCardIndex]?.id }))
-  } catch {
-    // Quota or disabled storage — silent, not worth disrupting UX.
+  const value = JSON.stringify({ cardId: CARDS[currentCardIndex]?.id })
+  if (even) {
+    void even.setStorage(PERSIST_KEY, value)
+  } else {
+    try {
+      window.localStorage.setItem(PERSIST_KEY, value)
+    } catch {
+      // Quota or disabled storage — silent, not worth disrupting UX.
+    }
   }
-}
-const persisted = loadPersistedState()
-if (persisted.cardId) {
-  const idx = CARDS.findIndex(c => c.id === persisted.cardId)
-  if (idx >= 0) currentCardIndex = idx
 }
 let transientMessage: string | null = null
 let transientTimer: number | null = null
@@ -175,7 +191,12 @@ function formatLeft(): string {
       : 'weather: ...'
   const badges = formatAttentionBadges()
   const health = formatServiceHealth()
-  const lines = [`${h12}:${minutes} ${period}`, dateLine, '', tempLine]
+  const device = formatDeviceLine()
+  const greeting = formatGreeting()
+  const lines = [`${h12}:${minutes} ${period}`, dateLine]
+  if (greeting) lines.push(greeting)
+  lines.push('', tempLine)
+  if (device) lines.push(device)
   if (badges) lines.push('', badges)
   if (health) lines.push('', health)
   return lines.join('\n')
@@ -212,6 +233,40 @@ function formatServiceHealth(): string {
   const b = serviceHealth.bridge ? '●' : '○'
   const w = serviceHealth.widget ? '●' : '○'
   return `bridge ${b}  widget ${w}`
+}
+
+// Battery + wearing state from onDeviceStatusChanged. Renders nothing until
+// the first event arrives (avoids "0%" flicker on cold start).
+function formatDeviceLine(): string {
+  const { batteryLevel, isCharging, isWearing } = deviceStatus
+  if (batteryLevel === undefined) return ''
+  // Map level → progress-bar glyph from the design-guide verified set.
+  const bar = batteryGlyph(batteryLevel)
+  const charge = isCharging ? '+' : ' '
+  const lowFlag = batteryLevel <= 20 ? ' !' : ''
+  const wearFlag = isWearing === false ? '  ZZZ' : ''
+  return `${charge}${bar} ${batteryLevel}%${lowFlag}${wearFlag}`
+}
+
+function batteryGlyph(level: number): string {
+  if (level >= 88) return '█'
+  if (level >= 75) return '▇'
+  if (level >= 62) return '▆'
+  if (level >= 50) return '▅'
+  if (level >= 37) return '▄'
+  if (level >= 25) return '▃'
+  if (level >= 12) return '▂'
+  return '▁'
+}
+
+// Personalized greeting on the left column. Skips silently if we don't have
+// the user's name yet (or they're in a region where Even doesn't expose one).
+function formatGreeting(): string {
+  const first = userInfo.name?.trim().split(/\s+/)[0]
+  if (!first) return ''
+  const h = new Date().getHours()
+  const part = h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'
+  return `hi ${first} — ${part}`
 }
 
 function currentCard(): CardDefinition {
@@ -309,6 +364,9 @@ function startActiveCardPoll(): void {
     // Stop polling when idle so the firmware's display-sleep can kick in.
     // User interaction wakes us back up via markActive().
     if (isIdle()) return
+    // Also pause when the user isn't wearing the glasses — no point burning
+    // BLE bandwidth and phone CPU on data nobody can see.
+    if (deviceStatus.isWearing === false) return
     void (async () => {
       await fetchCard(card)
       if (currentCard().id === card.id) await paint()
@@ -519,6 +577,23 @@ const initialLeft = formatLeft()
 const initialRight = formatCardOutput()
 const even = await connectEvenRuntime(initialLeft, initialRight)
 
+// Restore the last-viewed card from native storage now that the bridge is
+// available. Done before initial paint so the user sees the right card on
+// first frame instead of card-0-then-flash.
+const persisted = await loadPersistedState()
+if (persisted.cardId) {
+  const idx = CARDS.findIndex(c => c.id === persisted.cardId)
+  if (idx >= 0) currentCardIndex = idx
+}
+
+// Pull the user's display name once for the greeting line (best-effort).
+if (even) {
+  void even.getUserInfo().then(info => {
+    userInfo = info
+    if (viewMode === 'dashboard') void paint()
+  })
+}
+
 await paint()
 void refreshWeather()
 void refreshServiceHealth()
@@ -573,6 +648,30 @@ if (even) {
     void refreshWeather()
     void refreshServiceHealth()
     void refreshActiveCard()
+  })
+  even.onDeviceStatus(status => {
+    const wasWearing = deviceStatus.isWearing
+    deviceStatus = status
+    // Put-them-on transition (false → true) is a perfect refresh trigger:
+    // user just engaged, push the freshest data they should see first.
+    if (wasWearing === false && status.isWearing === true) {
+      markActive()
+      void refreshActiveCard()
+      void refreshServiceHealth()
+    }
+    if (viewMode === 'dashboard') void paint()
+  })
+  // Honor launch source: when the user opened us via the GLASSES menu, jump
+  // straight to the Today summary (index 0). When opened from the phone-app
+  // menu, leave them on whatever card they last viewed (already restored
+  // from persisted state above).
+  let launchHandled = false
+  even.onLaunchSource(kind => {
+    if (launchHandled) return
+    launchHandled = true
+    if (kind === 'glasses-menu' && currentCardIndex !== 0) {
+      void jumpToCard(0)
+    }
   })
   startActiveCardPoll()
 } else {

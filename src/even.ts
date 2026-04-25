@@ -1,6 +1,8 @@
 import {
   CreateStartUpPageContainer,
   EventSourceType,
+  LAUNCH_SOURCE_APP_MENU,
+  LAUNCH_SOURCE_GLASSES_MENU,
   ListContainerProperty,
   ListItemContainerProperty,
   OsEventTypeList,
@@ -27,6 +29,22 @@ const HEIGHT = 288
 export type SwipeDirection = 'up' | 'down'
 export type InputSource = 'glasses' | 'ring' | 'unknown'
 
+// Subset of the SDK's DeviceStatus that we surface to main.ts. Numbers can be
+// undefined when the firmware hasn't reported a value yet.
+export interface DeviceStatusSnapshot {
+  batteryLevel?: number
+  isCharging?: boolean
+  isWearing?: boolean
+}
+
+export type LaunchSourceKind = 'app-menu' | 'glasses-menu' | 'unknown'
+
+export interface UserInfoSnapshot {
+  name?: string
+  avatar?: string
+  country?: string
+}
+
 export interface EvenRuntime {
   render: (left: string, right: string) => Promise<void>
   renderDetail: (text: string) => Promise<void>
@@ -34,12 +52,19 @@ export interface EvenRuntime {
   onSwipe: (handler: (dir: SwipeDirection, source: InputSource) => void) => void
   onDoubleTap: (handler: (source: InputSource) => void) => void
   onForeground: (handler: () => void) => void
+  onDeviceStatus: (handler: (status: DeviceStatusSnapshot) => void) => void
+  onLaunchSource: (handler: (kind: LaunchSourceKind) => void) => void
   // Modal picker — rebuilds the page to a full-screen list container and
   // resolves with the selected index (or null if the user double-taps to
   // cancel). After resolving, the original two-column layout is restored
   // with the content it had when the modal opened.
   openPicker: (header: string, options: string[]) => Promise<number | null>
   exitApp: () => Promise<void>
+  // Native companion-app key/value storage. Survives WebView-kill cycles
+  // more reliably than browser localStorage on iOS.
+  getStorage: (key: string) => Promise<string>
+  setStorage: (key: string, value: string) => Promise<boolean>
+  getUserInfo: () => Promise<UserInfoSnapshot>
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -189,9 +214,26 @@ export async function connectEvenRuntime(
   let swipeHandler: ((dir: SwipeDirection, source: InputSource) => void) | null = null
   let doubleTapHandler: ((source: InputSource) => void) | null = null
   let foregroundHandler: (() => void) | null = null
+  let deviceStatusHandler: ((status: DeviceStatusSnapshot) => void) | null = null
+  let launchSourceHandler: ((kind: LaunchSourceKind) => void) | null = null
   // When non-null, a modal picker is open. All input events route through it
   // (list-tap = select, double-tap = cancel) instead of the normal handlers.
   let modalResolver: ((value: number | null) => void) | null = null
+
+  bridge.onDeviceStatusChanged(status => {
+    deviceStatusHandler?.({
+      batteryLevel: status.batteryLevel,
+      isCharging: status.isCharging,
+      isWearing: status.isWearing,
+    })
+  })
+
+  bridge.onLaunchSource(source => {
+    let kind: LaunchSourceKind = 'unknown'
+    if (source === LAUNCH_SOURCE_GLASSES_MENU) kind = 'glasses-menu'
+    else if (source === LAUNCH_SOURCE_APP_MENU) kind = 'app-menu'
+    launchSourceHandler?.(kind)
+  })
 
   function classifySource(src: number | undefined): InputSource {
     if (src === EventSourceType.TOUCH_EVENT_FROM_RING) return 'ring'
@@ -374,9 +416,37 @@ export async function connectEvenRuntime(
     onForeground(handler) {
       foregroundHandler = handler
     },
+    onDeviceStatus(handler) {
+      deviceStatusHandler = handler
+    },
+    onLaunchSource(handler) {
+      launchSourceHandler = handler
+    },
     openPicker,
     async exitApp() {
       await bridge.shutDownPageContainer(1)
+    },
+    async getStorage(key) {
+      try {
+        return await bridge.getLocalStorage(key)
+      } catch {
+        return ''
+      }
+    },
+    async setStorage(key, value) {
+      try {
+        return await bridge.setLocalStorage(key, value)
+      } catch {
+        return false
+      }
+    },
+    async getUserInfo() {
+      try {
+        const u = await bridge.getUserInfo()
+        return { name: u.name, avatar: u.avatar, country: u.country }
+      } catch {
+        return {}
+      }
     },
   }
 }
