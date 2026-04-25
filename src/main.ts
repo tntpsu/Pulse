@@ -355,6 +355,18 @@ async function refreshActiveCard(): Promise<void> {
   await paint()
 }
 
+// Re-fetches the Today card's aggregated counts so the left-column attention
+// badges and the dashboard glance card reflect the latest state. Called after
+// any picker action succeeds, since the active card alone won't update the
+// cross-card counts the badges read from.
+async function refreshTodayCard(): Promise<void> {
+  const todayCard = CARDS.find(c => c.id === 'today')
+  if (!todayCard) return
+  if (currentCard().id === todayCard.id) return // already covered by refreshActiveCard
+  await fetchCard(todayCard)
+  if (viewMode === 'dashboard') await paint()
+}
+
 let activePollTimer: number | null = null
 
 function startActiveCardPoll(): void {
@@ -521,6 +533,7 @@ async function handlePrimaryTap(): Promise<void> {
         pendingUndo = null
         transientMessage = null
         await fetchCard(card)
+        void refreshTodayCard()
         currentItemIndex = 0
         viewMode = 'dashboard'
         await paint()
@@ -536,6 +549,7 @@ async function handlePrimaryTap(): Promise<void> {
       // they were.
       if (flashMs === 1500) {
         await fetchCard(card)
+        void refreshTodayCard()
         currentItemIndex = 0
         viewMode = 'dashboard'
         await paint()

@@ -21,12 +21,14 @@ import { nowPlayingCard } from './now-playing'
 import { sportsCard } from './sports'
 import { tasksCard } from './tasks'
 import { todayCard } from './today'
+import { weatherCard } from './weather'
 import type { CardDefinition } from './_types'
 
 export type { ActionResult, CardDefinition, PickerOption } from './_types'
 
 export const CARDS: CardDefinition[] = [
   todayCard,
+  weatherCard,
   sportsCard,
   duckOpsSalesCard,
   duckOpsPackQueueCard,

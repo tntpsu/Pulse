@@ -101,6 +101,12 @@ export async function loadDuckOps(): Promise<DuckOpsStatus> {
 
 interface OpenMeteoResponse {
   current?: { temperature_2m?: number; weather_code?: number }
+  daily?: {
+    time?: string[]
+    temperature_2m_max?: number[]
+    temperature_2m_min?: number[]
+    weather_code?: number[]
+  }
 }
 
 const WEATHER_CODE_LABELS: Record<number, string> = {
@@ -131,6 +137,36 @@ export async function loadWeather(): Promise<WeatherSnapshot> {
     temperatureF: Math.round(tempF),
     conditionLabel: WEATHER_CODE_LABELS[code] ?? 'Unknown',
   }
+}
+
+export async function loadWeatherForecast(): Promise<import('./types').WeatherForecast> {
+  const params = new URLSearchParams({
+    latitude: WEATHER_LAT,
+    longitude: WEATHER_LON,
+    current: 'temperature_2m,weather_code',
+    daily: 'temperature_2m_max,temperature_2m_min,weather_code',
+    forecast_days: '5',
+    temperature_unit: 'fahrenheit',
+    timezone: 'auto',
+  })
+  const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`
+  const payload = await fetchJson<OpenMeteoResponse>(url)
+  const current: WeatherSnapshot = {
+    temperatureF: Math.round(payload.current?.temperature_2m ?? 0),
+    conditionLabel: WEATHER_CODE_LABELS[payload.current?.weather_code ?? 0] ?? 'Unknown',
+  }
+  const d = payload.daily ?? {}
+  const dates = d.time ?? []
+  const highs = d.temperature_2m_max ?? []
+  const lows = d.temperature_2m_min ?? []
+  const codes = d.weather_code ?? []
+  const days = dates.map((date, i) => ({
+    date,
+    hi: Math.round(highs[i] ?? 0),
+    lo: Math.round(lows[i] ?? 0),
+    conditionLabel: WEATHER_CODE_LABELS[codes[i] ?? 0] ?? 'Unknown',
+  }))
+  return { current, days }
 }
 
 interface EspnScoreboardResponse {

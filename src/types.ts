@@ -112,6 +112,18 @@ export interface WeatherSnapshot {
   conditionLabel: string
 }
 
+export interface DailyWeather {
+  date: string // YYYY-MM-DD
+  hi: number
+  lo: number
+  conditionLabel: string
+}
+
+export interface WeatherForecast {
+  current: WeatherSnapshot
+  days: DailyWeather[] // up to 5
+}
+
 export interface SportsGameSnapshot {
   state: 'pre' | 'in' | 'post' | 'none'
   opponentAbbrev: string | null
