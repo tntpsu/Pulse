@@ -125,6 +125,10 @@ Heartbeat (10s) re-renders to prevent firmware display sleep. No heartbeat = dis
 | Restart both backend services | See `/restart-services` skill. |
 | Dry-run test an approval | See `/dry-run-approve` skill. |
 
+## Roadmap
+
+`ROADMAP.md` (in this repo) tracks pending user actions, queued work, and detailed plans for unstarted features (image containers, audio + wake-word, plus three standalone apps: lyrics overlay, live captions, recipe assistant). Check it before starting a new direction.
+
 ## Memory cross-references
 
 Key memory files that apply here (in `~/.claude/projects/-Users-philtullai-Documents-even/memory/`):
