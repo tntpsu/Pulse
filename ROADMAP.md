@@ -692,13 +692,14 @@ attempts — his most accurate
 | Pagination breaks on languages with no spaces (CJK) | Low | Low | Default to 400 chars hard-cap; v2 if anyone complains |
 | Sites change their HTML and break extraction | Medium ongoing | Low (graceful degrade) | Generic extractor not site-specific scrapers, so most changes don't break us. Worst case: a specific site stops working until we tweak heuristics |
 
-### 9. Open questions to resolve before scaffolding
+### 9. Decisions (resolved 2026-04-25)
 
-1. **App name?** Working title "Web Reader" is generic. Alternatives: "Open" (short, punchy), "Glance" (matches glasses use case), "Lookat" (verb-y, clean), "GLR" (acronym). User picks.
-2. **Default source list — which 10?** I'll seed with HN, NYT tech, NPR, BBC, Ars Technica, The Atlantic, TechCrunch, ESPN, NYT Cooking, the user picks the 10th. User can override.
-3. **Article cache TTL — forever or N days?** Forever is simpler and saves r.jina.ai calls but grows storage. Storage cap maybe 100 articles, oldest evicted? Defer until we see actual usage.
-4. **Optional Jina API key in settings?** Lets power users get higher rate limits. ~30 min to add but adds settings surface area. Defer to v2.
-5. **Voice / Tailscale / etc.?** All deferred. v1 is intentionally a simple, focused, no-extras release.
+1. **App name: Glance.** Package ID: `com.philtullai.glance`. Repo location: `~/Documents/Glance/`.
+2. **Default sources (5):** ESPN, CNN, Yahoo, Hacker News, BBC News. User can add/remove via the phone-side settings page.
+3. **Article cache TTL:** 30 days, with a hard cap of 100 cached article bodies; oldest evicted when the cap is hit.
+4. **Jina API key field:** deferred to v2. The free 200/day tier covers a single user comfortably.
+5. **Authentication for paywalled / login-walled sites (e.g. bwi.rivals.com):** out of scope for v1. Plan for a v1.5 personal Cloudflare Worker that handles user-specific authenticated sites separately. Public-only v1 ships first.
+6. **Other v2 deferrals (explicit):** voice commands, OAuth (Pocket/Readwise), iOS Share Sheet integration, site-specific scrapers, Tailscale anything. v1 is minimal.
 
 ### 10. Effort summary
 
