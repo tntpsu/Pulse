@@ -2,10 +2,21 @@
   "package_id": "com.philtullai.philshome",
   "edition": "202601",
   "name": "Phils Home",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "min_app_version": "2.0.0",
   "min_sdk_version": "0.0.10",
   "entrypoint": "index.html",
-  "permissions": [],
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Fetches Duck Ops dashboard data from the LAN-only widget_api (8780) and phils-bridge (8790) on the Mac mini, plus open-meteo weather and ESPN sports public APIs.",
+      "whitelist": [
+        "http://10.168.168.105:8780",
+        "http://10.168.168.105:8790",
+        "https://api.open-meteo.com",
+        "https://site.api.espn.com"
+      ]
+    }
+  ],
   "supported_languages": ["en"]
 }
