@@ -82,17 +82,24 @@ These are NOT part of Phils Home — each lives in its own repo with its own `pa
 
 **Why third:** smaller audience than #1/#2, IMU gesture detection is finicky (most of the build time goes to tuning thresholds). See **§ Plan: Recipe Assistant** below.
 
-### 4. Glance — Glasses Web Reader ✅ BUILT v0.1.0
+### 4. Glance — Glasses Web Reader ✅ BUILT v0.4.0
 
-**Status:** scaffolded, implemented, packed, ready to sideload. Lives at `~/Documents/Glance/`. Initial commit + Sessions A/B/C complete in 2026-04-25 overnight session. `glance.ehpk` (34815 bytes) at the repo root.
+**Status:** sideload-ready. Lives at `~/Documents/Glance/`. Submission packet ready (`SUBMISSION.md`).
 
-**What works:** three-layer navigation (sources → article list → reader), phone-side settings UI to add/remove sources, paywall + bot-wall detection, 30-day article-body cache, resume-state on relaunch. End-to-end verified against Hacker News (extraction → article body fetch → pagination).
+**What's shipped (cumulative):**
+- v0.1.0: scaffold + three-layer nav + phone settings + cache + resume
+- v0.2.0: Vitest unit tests (36 passing) + adapter pattern + ESPN-news adapter + Inbox + share-sheet paste
+- v0.3.0: cursor-scroll list UX + state migration + friendly error messaging + simulator-automation regression test (10/10 passing)
+- v0.4.0: Jina API key support + clipboard-on-focus auto-import banner + ESPN league picker + read-state tracking (✓ markers) + worker adapter + Cloudflare Worker template for auth-walled sites (`worker-template/`)
 
-**Known v1 limits documented in `~/Documents/Glance/README.md`:** ESPN bot-walls r.jina.ai (substituted with `sports.yahoo.com` in defaults), paywalled articles show a teaser + warning, r.jina.ai free tier 200/day cap.
+**Still queued for v0.5+:**
+- iOS Shortcut for true one-tap share-sheet → Glance (currently uses clipboard-detect on app focus)
+- Pocket / Readwise OAuth import
+- "Show unread only" toggle in source view (read state is captured but not yet filterable)
+- More ESPN leagues hot-swap (currently per-source picker on settings page; could be in-glasses)
+- Per-source delete UI for cached article bodies
 
-**Next user-facing step:** sideload `~/Documents/Glance/glance.ehpk` at `https://hub.evenrealities.com/application` after creating the `com.philtullai.glance` project. See README for testing flow.
-
-**v1.x / v2 queued** (still in this plan): ESPN-API adapter, auth-walled sites via personal Worker, Jina API key, iOS Share Sheet, Pocket/Readwise OAuth.
+**Sideload path:** glance.ehpk at the repo root, upload to `https://hub.evenrealities.com/application` for the `com.philtullai.glance` project.
 
 ---
 
