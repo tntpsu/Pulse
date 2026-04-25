@@ -73,8 +73,8 @@ The G2 temple + optional R1 ring give us 6 usable inputs. Current assignments:
 | Single tap (detail, non-actionable item) | Back to dashboard |
 | Single tap (detail, actionable item) | **Open the action picker modal** (full-screen list of card-declared options) |
 | Single tap (while UNDO window is open) | Fire the undo closure of the last action |
-| Glasses double tap | System exit dialog (Even convention — never override) |
-| Ring double tap (detail) | Non-destructive back to dashboard |
+| Double tap (detail, EITHER source) | Back to dashboard. Overrides the Even "glasses-double-tap = exit" convention because the user prefers not to lose their place when reading a card. Exit is still reachable from dashboard via glasses-2-tap. |
+| Glasses double tap (dashboard) | System exit dialog |
 | Ring double tap (dashboard) | **Open the card-selector modal** (jump to any card in the carousel) |
 | Swipe up/down (dashboard) | Prev/next card |
 | Swipe up/down (detail, item-paginated card) | Prev/next item within card |

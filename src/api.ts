@@ -235,6 +235,18 @@ interface EspnScheduleResponse {
 const SCHEDULE_CACHE_MS = 60_000
 const espnScheduleCache = new Map<string, { fetchedAt: number; data: EspnScheduleSummary }>()
 
+function compactDateTime(d: Date): string {
+  const m = d.getMonth() + 1
+  const day = d.getDate()
+  const hr = d.getHours()
+  const min = d.getMinutes()
+  const ampm = hr >= 12 ? 'p' : 'a'
+  const h12 = hr % 12 === 0 ? 12 : hr % 12
+  // "4/25 8p" or "4/25 8:30p" — keeps it under ~10 chars.
+  const time = min === 0 ? `${h12}${ampm}` : `${h12}:${min.toString().padStart(2, '0')}${ampm}`
+  return `${m}/${day} ${time}`
+}
+
 function scoreNumber(score: unknown): number | null {
   if (typeof score === 'number') return score
   if (typeof score === 'string') {
@@ -300,26 +312,21 @@ export async function loadEspnTeamSchedule(cfg: EspnTeamConfig): Promise<EspnSch
       scoreSelf: scoreNumber(self?.score),
       scoreOpponent: scoreNumber(other?.score),
       resultLabel: shortDetail,
+      // Compact "4/24" so the line fits the right column without wrapping.
       dateLabel: e.date
-        ? new Date(e.date).toLocaleDateString([], { month: 'short', day: 'numeric' })
+        ? `${new Date(e.date).getMonth() + 1}/${new Date(e.date).getDate()}`
         : null,
     }
   }
   if (nextIdx >= 0) {
     const e = events[nextIdx]!
     const { self, other } = summarize(e)
+    // Compact "4/25 8p" to fit the line without wrapping. Long ESPN strings
+    // like "Sat, Apr 25 at 8:00 PM" overflow the 336px right column.
     summary.next = {
       opponentAbbrev: other?.team?.abbreviation ?? null,
       homeAway: self?.homeAway ?? null,
-      startsAtLabel: e.date
-        ? new Date(e.date).toLocaleString([], {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-          })
-        : null,
+      startsAtLabel: e.date ? compactDateTime(new Date(e.date)) : null,
     }
   }
   espnScheduleCache.set(key, { fetchedAt: Date.now(), data: summary })

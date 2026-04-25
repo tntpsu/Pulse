@@ -37,7 +37,7 @@ const EMPTY_SCHEDULE: EspnScheduleSummary = { last: null, next: null }
 async function loadOneTeam(t: TeamConfig): Promise<TeamSnapshot> {
   const [schedule, articles] = await Promise.all([
     loadEspnTeamSchedule(t.cfg).catch(() => EMPTY_SCHEDULE),
-    loadEspnTeamNewsList(t.cfg, 5).catch(() => [] as EspnArticle[]),
+    loadEspnTeamNewsList(t.cfg, 3).catch(() => [] as EspnArticle[]),
   ])
   return { displayName: t.displayName, short: t.short, schedule, articles }
 }
@@ -117,7 +117,9 @@ function formatItem(item: unknown, index: number, total: number): string {
 function teamArticleActions(item: unknown): PickerOption[] {
   const t = item as TeamSnapshot
   if (t.articles.length === 0) return []
-  return t.articles.slice(0, 5).map((article, i) => ({
+  // Cap at 3 so the [tap] hint block in detail view doesn't overflow the
+  // right column; loadOneTeam also fetches only 3 for the same reason.
+  return t.articles.slice(0, 3).map((article, i) => ({
     // Short-title the headline so the picker list fits; full text goes in run().
     label: `${i + 1}. ${article.headline.slice(0, 48)}`,
     run: async () => {

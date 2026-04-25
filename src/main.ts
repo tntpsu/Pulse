@@ -645,18 +645,20 @@ if (even) {
       void paint()
       return
     }
+    // Both ring AND glasses double-tap in detail → back to dashboard.
+    // Even convention says glasses-double-tap should always exit, but the
+    // user explicitly preferred "back" here so they don't lose their place
+    // when reading a card. Exit is still available from dashboard view.
+    if (viewMode === 'detail') {
+      viewMode = 'dashboard'
+      void paint()
+      return
+    }
+    // In dashboard mode: ring → card-selector, glasses → exit app.
     if (source === 'ring') {
-      // Ring 2-tap in detail → non-destructive back to dashboard.
-      if (viewMode === 'detail') {
-        viewMode = 'dashboard'
-        void paint()
-        return
-      }
-      // Ring 2-tap in dashboard → open the card-selector modal.
       void openCardSelector()
       return
     }
-    // Glasses 2-tap → exit app (Even convention — never override).
     void even.exitApp()
   })
   even.onForeground(() => {
