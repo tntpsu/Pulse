@@ -82,19 +82,13 @@ These are NOT part of Phils Home — each lives in its own repo with its own `pa
 
 **Why third:** smaller audience than #1/#2, IMU gesture detection is finicky (most of the build time goes to tuning thresholds). See **§ Plan: Recipe Assistant** below.
 
-### 4. RSS Reader (deferred — personal-utility, not viral)
+### 4. Glasses Web Reader ⭐ ACTIVE BUILD PLAN
 
-**Concept:** glanceable RSS aggregator on the glasses. User adds feed URLs (or accepts curated defaults like HN front page); plugin polls feeds in the WebView, renders paginated body via swipe. Body comes from `<content:encoded>` if the feed has it, otherwise extracted via free public service `r.jina.ai/<url>` (CORS-open URL-to-markdown). Stored in `bridge.setLocalStorage` per install. ~10 hour build.
+**Pitch:** "Browse the open web on your glasses, hands-free." Three-layer navigation — pick a saved site → see its current article list → tap one to read paginated text. No backend infrastructure required (uses free CORS-open `r.jina.ai` for both index-page and article extraction).
 
-**Why deferred:** explored for shippability — works fine, no backend infrastructure required, completely self-contained. But the audience is narrow (RSS users only ~1-2% of phone users) and the demo factor is low. Lyrics Overlay and Teleprompter both have larger viral surface for similar effort. Keep this as a fallback project for "I want a useful glasses app for myself" rather than "I want a Hub hit."
+**Why ahead of Lyrics Overlay etc:** confirmed-empty Even Hub niche; r.jina.ai's universal extraction (handles JS-rendered SPAs that killed our ESPN scraper) makes it viable as a true "any site" browser, not just an RSS reader. The "browse the web with your glasses" demo writes itself.
 
-**Architecture sketch (so we don't have to re-derive next time):**
-- Phone-side: paste URL field for adding feeds; bridge.setLocalStorage holds the inbox keyed by feed
-- Body extraction: prefer feed's own `<content:encoded>`; fallback to `https://r.jina.ai/<article-url>` which returns clean markdown with CORS open
-- Glasses: same picker + paginated-text patterns we built for Phils Home. ~400 chars/page. Resume position cached.
-- Optional v2: Pocket / Readwise OAuth, HN API integration as a built-in source
-
-**Hard constraint discovered while researching:** without a backend, you cannot build a *general* "any URL → glasses" reader. CORS blocks the WebView from fetching most arbitrary news sites, JS-rendered SPAs return shells with no extractable body, and anti-bot protections (Cloudflare, etc.) block unauthenticated server-less requests. The no-backend path is limited to RSS-friendly + API-friendly sources + the r.jina.ai escape hatch.
+See **§ Plan: Glasses Web Reader** below for the full build spec.
 
 ---
 
@@ -445,6 +439,299 @@ Single full-screen step view. Generous text since cooking is read-glanceably.
 
 ### Skills to invoke
 `everything-evenhub:quickstart` → `everything-evenhub:device-features` (IMU) → `everything-evenhub:handle-input` → `everything-evenhub:glasses-ui` → `everything-evenhub:font-measurement` → `everything-evenhub:simulator-automation` (IMU-event injection for testing) → `everything-evenhub:build-and-deploy`
+
+---
+
+## Plan: Glasses Web Reader (full build spec)
+
+This is the active plan as of 2026-04-25. Maintain in lockstep as we build — when something changes during implementation, update this doc, don't let it go stale.
+
+### 1. Product summary
+
+A standalone Even Hub plugin (`com.philtullai.webreader`) that lets the user pick from a small list of saved websites, see the current articles on each site's homepage, and read selected articles as paginated text on the glasses. All extraction happens via `r.jina.ai` — a free public service that turns any URL into clean markdown via headless Chromium. No personal backend infrastructure required; the app is fully self-contained and shippable to any Even Hub user.
+
+**Target user:** anyone who reads articles online and finds holding a phone for 5-10 min uncomfortable or limiting (walking, in line, cooking, watching kids).
+
+**Value prop in one sentence:** "Read any website's articles on your smart glasses, hands-free."
+
+### 2. Architecture overview
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ User's phone (iOS / Android)                                           │
+│                                                                        │
+│ ┌────────────────────────┐         ┌─────────────────────────────────┐ │
+│ │ Even Hub companion app │  hosts  │ Web Reader plugin (TS WebView)  │ │
+│ │ (native iOS/Android)   │ ──────► │                                  │ │
+│ └────────────────────────┘         │  - phone-side settings UI       │ │
+│                                    │    (visible in companion when    │ │
+│                                    │     not on glasses)              │ │
+│                                    │  - reader engine                 │ │
+│                                    │  - bridge.setLocalStorage        │ │
+│                                    └────────────────┬─────────────────┘ │
+│                                                     │                   │
+│                                                     │ fetch()           │
+│                                                     ▼                   │
+└─────────────────────────────────────────────────────────────────────────┘
+                                                      │
+                                                      ▼
+                            ┌──────────────────────────────────────┐
+                            │  https://r.jina.ai/<any-url>         │
+                            │  (free, CORS-open, headless Chromium)│
+                            │  returns clean markdown              │
+                            └──────────────────────────────────────┘
+                                                      │
+                                                      ▼
+                                          ┌──────────────────────┐
+                                          │  Even G2 glasses     │
+                                          │  via BLE display     │
+                                          └──────────────────────┘
+```
+
+No bridge service, no Mac dependency, no Tailscale required. Whole stack is plugin code + r.jina.ai.
+
+### 3. Data model
+
+```ts
+// User-configured site they want to read from. Persisted in
+// bridge.setLocalStorage('reader:sources', json).
+interface Source {
+  id: string         // UUID
+  url: string        // homepage or section URL, e.g. "https://espn.com"
+  title: string      // user-supplied display name, e.g. "ESPN"
+  lastFetchedAt?: number
+}
+
+// Article extracted from a source's homepage. Lives in memory only —
+// re-extracted when user re-opens the site (cached briefly).
+interface Article {
+  url: string        // absolute URL of the article
+  title: string      // headline
+}
+
+// Body for a specific article. Cached in setLocalStorage forever
+// (articles don't change after publish — re-reads are free).
+interface ArticleBody {
+  url: string        // key
+  title: string
+  body: string       // markdown text
+  fetchedAt: number
+}
+
+// Plugin-level state stored across launches.
+interface ReaderState {
+  sources: Source[]
+  // last viewed: source URL + article URL + page number, so re-launch
+  // resumes where the user left off.
+  resume?: { sourceId: string; articleUrl?: string; page?: number }
+}
+```
+
+### 4. UX state machine
+
+```
+        ┌───────────────────────┐
+        │  SOURCES              │ ← initial state on launch
+        │  (list of saved sites)│
+        └───────┬───────────────┘
+                │ tap a source
+                ▼
+        ┌───────────────────────┐
+        │  ARTICLE LIST         │ ← fetching the homepage via r.jina.ai
+        │  (titles from site)   │   (5min cache; show "loading" if fresh)
+        └───────┬───────────────┘
+                │ tap an article    ← double-tap = back to SOURCES
+                ▼
+        ┌───────────────────────┐
+        │  READER               │ ← fetching the article via r.jina.ai
+        │  (paginated text)     │   (forever cache; instant on re-read)
+        └───────────────────────┘   ← double-tap = back to ARTICLE LIST
+                                    ← swipe ↓/↑ = next/prev page
+                                    ← swipe-end = next article in list
+```
+
+Three layers, each is the same picker + paginated-text pattern we already built in PhilsHome. The complexity is in the extraction pipeline, not the UI.
+
+**Phone-side settings view** (separate state, only visible when the user opens the plugin tile in the Even Hub companion before putting glasses on — this is a normal HTML page in the WebView):
+
+```
+WEB READER — sources
+
+[x] ESPN                              ⨯
+    https://espn.com
+
+[x] Hacker News                       ⨯
+    https://news.ycombinator.com
+
+[x] NYT Tech                          ⨯
+    https://nytimes.com/section/technology
+
+Add new source:
+  Title: [_____________________]
+  URL:   [_____________________]
+  [Add]
+
+Reset to default sources
+```
+
+### 5. Glasses display layouts
+
+**Sources** (entry point):
+```
+SOURCES                       v1.0
+
+> ESPN
+  Hacker News
+  NYT Tech
+  TechCrunch
+  Ars Technica
+
+[tap] open · [2x-tap] settings
+```
+
+**Article list** (after picking a source):
+```
+ESPN — fetched 3:42pm
+
+> 1. Lamar Jackson sets new record
+  2. Cowboys announce trade
+  3. Lakers fall to Celtics 105-98
+  4. Curry hits 4000th 3-pointer
+  5. Yankees swept by Astros
+
+[swipe ↓ for more · 23 total]
+```
+
+**Reader** (after picking an article):
+```
+LAMAR JACKSON SETS RECORD
+Page 1 of 8
+
+In a stunning performance Sunday,
+Ravens quarterback Lamar Jackson
+threw for 412 yards and 4
+touchdowns, breaking the franchise
+record set by Joe Flacco in 2014.
+
+The Ravens (8-3) cruised to a
+31-17 win over Cleveland, with
+Jackson connecting on 28 of 35
+attempts — his most accurate
+
+[swipe ↓ next · ↑ prev · 2x back]
+```
+
+### 6. Implementation tasks (ordered)
+
+| # | Task | Detail | Est |
+|---|---|---|---|
+| 1 | Scaffold project | `everything-evenhub:quickstart` skill. package_id `com.philtullai.webreader`. Reuse the picker / paginated-text patterns from PhilsHome's `even.ts` + `main.ts` | 0.5h |
+| 2 | Native storage layer | Wrap `bridge.setLocalStorage` / `getLocalStorage` with typed accessors for `ReaderState` and `ArticleBody` cache. Handle JSON parse errors gracefully | 1h |
+| 3 | r.jina.ai client | `fetchHomepage(url): Promise<Article[]>` and `fetchArticle(url): Promise<ArticleBody>`. Both use `https://r.jina.ai/<url>`. Parse `Title:` / `Markdown Content:` blocks from response text | 2h |
+| 4 | Homepage link extractor | Parse markdown for `[title](url)` patterns. Filter heuristics: same-domain, title 25-150 chars, URL path looks article-like (filter `/login`, `/help`, `/search`, `/category`, anchor-only links, etc.). Dedupe by URL. Sort by appearance order | 2h |
+| 5 | Pagination | Split markdown body into ~400-char pages on word boundaries. Don't break mid-paragraph if avoidable | 1h |
+| 6 | Three-layer navigation in main.ts | Source picker → article picker → reader. Each level uses `even.openPicker` for selection. State machine for current view + back behavior | 2h |
+| 7 | Phone-side settings page | HTML form rendered when WebView focus is on phone (not glasses). Add/remove source URLs, reset to defaults. Persist to localStorage on every change | 2h |
+| 8 | Caching | Homepage cache 5 min in memory (re-fetch on stale); article body cache forever in setLocalStorage (re-reads are free) | 1h |
+| 9 | Resume state | Persist `{sourceId, articleUrl, page}` on every page-flip. On launch, if `resume` is set, jump straight to that article + page | 1h |
+| 10 | Error states | Loading indicator, "couldn't reach r.jina.ai", "site returned no articles", "rate-limit reached", paywall detection ("This article requires a subscription") | 1.5h |
+| 11 | Curated default sources | Ship with: HN front page, NYT tech, NPR top stories, BBC News, Ars Technica, The Atlantic, TechCrunch, Hacker News, ESPN, NYT Cooking. Reset-to-defaults button restores | 0.5h |
+| 12 | Build, pack, sideload | First end-to-end test on real glasses | 1h |
+
+**Subtotal: 15.5 hours.**
+
+### 7. Testing strategy
+
+**Unit tests** (~ 2h to write, run in Vite test mode):
+
+- `extractArticles(markdown)`: feed in canned r.jina.ai responses for ESPN, HN, NYT, a paywalled site, and a broken site. Assert link counts and ordering.
+- `paginate(text, capChars)`: synthetic text of various lengths. Assert page boundaries on word breaks, no broken mid-word.
+- `linkFilter(url, title, sourceDomain)`: assert that `/login`, `/help`, anchor-only, off-domain, and too-short titles are filtered.
+
+**Integration tests** (~ 2h):
+
+- Mock r.jina.ai responses (fixture files captured from real responses for 5 different site types). Run the full pipeline and compare paginated output against golden files. Tests: ESPN homepage → first article body → page 1, 2, last.
+- Cache hit / miss behavior: first fetch hits network (mock), second within 5min returns cached, after 5min refetches.
+
+**Manual on-glasses smoke tests** (~ 2h):
+
+- Sideload v0.1.0 on real glasses. Run through all three layers with the curated default sources.
+- Test each from the verified-working list:
+  1. ESPN front page → top story → read 3 pages
+  2. HN front page → top item → read article body
+  3. NYT tech → an article → read until end
+  4. A site that returns a paywall → confirm graceful "subscription required" message
+  5. A site that returns no parseable articles → confirm graceful "couldn't extract" message
+- Test resume: read 3 pages of an article, exit app, reopen → confirm pages 4 starts.
+- Test rate-limit gracefully: simulate 200th request of the day, confirm fallback message.
+
+**Edge case checklist**:
+- [ ] Empty source list (just installed, no defaults yet) — show "Add a source" prompt
+- [ ] Source URL is malformed — phone-side settings rejects with error
+- [ ] Source URL is unreachable — show error in article-list state with retry button
+- [ ] Article list comes back with 0 items — show "site returned no articles"
+- [ ] Article body is shorter than 1 page — display single page, no pagination UI
+- [ ] Article body is longer than 50 pages — cap at 50 with "[truncated]" footer
+- [ ] User flips off glasses mid-read — pause polling, resume on put-back-on (per Phils Home pattern)
+- [ ] Network drops mid-fetch — show transient "couldn't load, swipe to retry"
+
+**Skills to use during testing**:
+- `everything-evenhub:simulator-automation` — automation HTTP API to inject input + capture screenshots, build regression tests for the three views
+- `everything-evenhub:test-with-simulator` — dev loop without sideload cycle
+- `everything-evenhub:font-measurement` — verify pagination math against actual LVGL render width
+
+### 8. Risk register
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| r.jina.ai shuts down or pivots to paid-only | Medium | High (app dies) | (a) cache all article bodies forever locally, (b) document a fallback to readability-via-self-hosted-Worker as a v2 if needed |
+| r.jina.ai 200/day rate limit hit | Low for solo, Medium for power users | Medium | Aggressive caching; "rate-limited, try again in N hours" clear UX; optional API key field in settings for users who pay Jina |
+| Homepage extraction yields garbage on cluttered sites | Medium | Medium | Generic heuristics + curated default list of verified-working sites; show "couldn't extract — try a different page or section URL" |
+| iOS WKWebView blocks `r.jina.ai` for some reason | Low (it's CORS-open) | High | Already verified r.jina.ai responds with CORS; whitelist `https://r.jina.ai` in app.json `permissions.network` from day 1 |
+| Paywalled articles return teaser text only | High | Low | Detect known paywall sentinels ("Subscribe to continue", "This article is for subscribers") and label clearly. Don't try to bypass — that's a different app |
+| Pagination breaks on languages with no spaces (CJK) | Low | Low | Default to 400 chars hard-cap; v2 if anyone complains |
+| Sites change their HTML and break extraction | Medium ongoing | Low (graceful degrade) | Generic extractor not site-specific scrapers, so most changes don't break us. Worst case: a specific site stops working until we tweak heuristics |
+
+### 9. Open questions to resolve before scaffolding
+
+1. **App name?** Working title "Web Reader" is generic. Alternatives: "Open" (short, punchy), "Glance" (matches glasses use case), "Lookat" (verb-y, clean), "GLR" (acronym). User picks.
+2. **Default source list — which 10?** I'll seed with HN, NYT tech, NPR, BBC, Ars Technica, The Atlantic, TechCrunch, ESPN, NYT Cooking, the user picks the 10th. User can override.
+3. **Article cache TTL — forever or N days?** Forever is simpler and saves r.jina.ai calls but grows storage. Storage cap maybe 100 articles, oldest evicted? Defer until we see actual usage.
+4. **Optional Jina API key in settings?** Lets power users get higher rate limits. ~30 min to add but adds settings surface area. Defer to v2.
+5. **Voice / Tailscale / etc.?** All deferred. v1 is intentionally a simple, focused, no-extras release.
+
+### 10. Effort summary
+
+- Build: ~15.5 hours
+- Testing (unit + integration + manual): ~6 hours
+- Polish + edge cases: ~2 hours
+- Documentation (README, demo gif, Hub submission): ~2 hours
+
+**Total: ~25 hours, distributable across 3-4 work sessions.**
+
+### 11. Skills to invoke during build
+
+In order of expected use:
+- `everything-evenhub:quickstart` — scaffold the new project
+- `everything-evenhub:cli-reference` — `evenhub pack` reminders
+- `everything-evenhub:glasses-ui` — text container layout, single-container vs two-column for reader vs source-list
+- `everything-evenhub:font-measurement` — precise pagination width for 400-char target
+- `everything-evenhub:handle-input` — picker / swipe / double-tap conventions
+- `everything-evenhub:test-with-simulator` — dev loop
+- `everything-evenhub:simulator-automation` — automated regression tests
+- `everything-evenhub:build-and-deploy` — final packaging + Hub submission checklist
+- `everything-evenhub:design-guidelines` — Unicode/typography sanity check before ship
+
+### 12. Definition of done for v1
+
+- [ ] All 12 implementation tasks complete
+- [ ] All unit + integration tests pass
+- [ ] Manual smoke test passes on real glasses for the 5 verified-working sites
+- [ ] Edge case checklist all green
+- [ ] README written (architecture, configuration, "why this exists")
+- [ ] `.ehpk` packaged with version 1.0.0
+- [ ] Submitted to Even Hub catalog (or held in draft pending user review)
+- [ ] Demo screenshot/gif captured for the listing
 
 ---
 
