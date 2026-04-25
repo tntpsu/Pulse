@@ -82,6 +82,20 @@ These are NOT part of Phils Home — each lives in its own repo with its own `pa
 
 **Why third:** smaller audience than #1/#2, IMU gesture detection is finicky (most of the build time goes to tuning thresholds). See **§ Plan: Recipe Assistant** below.
 
+### 4. RSS Reader (deferred — personal-utility, not viral)
+
+**Concept:** glanceable RSS aggregator on the glasses. User adds feed URLs (or accepts curated defaults like HN front page); plugin polls feeds in the WebView, renders paginated body via swipe. Body comes from `<content:encoded>` if the feed has it, otherwise extracted via free public service `r.jina.ai/<url>` (CORS-open URL-to-markdown). Stored in `bridge.setLocalStorage` per install. ~10 hour build.
+
+**Why deferred:** explored for shippability — works fine, no backend infrastructure required, completely self-contained. But the audience is narrow (RSS users only ~1-2% of phone users) and the demo factor is low. Lyrics Overlay and Teleprompter both have larger viral surface for similar effort. Keep this as a fallback project for "I want a useful glasses app for myself" rather than "I want a Hub hit."
+
+**Architecture sketch (so we don't have to re-derive next time):**
+- Phone-side: paste URL field for adding feeds; bridge.setLocalStorage holds the inbox keyed by feed
+- Body extraction: prefer feed's own `<content:encoded>`; fallback to `https://r.jina.ai/<article-url>` which returns clean markdown with CORS open
+- Glasses: same picker + paginated-text patterns we built for Phils Home. ~400 chars/page. Resume position cached.
+- Optional v2: Pocket / Readwise OAuth, HN API integration as a built-in source
+
+**Hard constraint discovered while researching:** without a backend, you cannot build a *general* "any URL → glasses" reader. CORS blocks the WebView from fetching most arbitrary news sites, JS-rendered SPAs return shells with no extractable body, and anti-bot protections (Cloudflare, etc.) block unauthenticated server-less requests. The no-backend path is limited to RSS-friendly + API-friendly sources + the r.jina.ai escape hatch.
+
 ---
 
 # Plans (full detail)
