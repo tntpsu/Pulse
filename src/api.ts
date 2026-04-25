@@ -448,6 +448,86 @@ export async function loadEspnGame(cfg: EspnTeamConfig): Promise<SportsGameSnaps
   }
 }
 
+// ─── Live league scoreboard ─────────────────────────────────────────────────
+// All today's games for an arbitrary ESPN league (no team filter). Powers the
+// scoreboard card where the user picks a sport and sees every live/upcoming
+// game in that league.
+
+export interface LeagueGame {
+  /** "in" = live, "post" = final, "pre" = scheduled. */
+  state: 'pre' | 'in' | 'post'
+  awayAbbrev: string
+  homeAbbrev: string
+  awayScore: number | null
+  homeScore: number | null
+  /** Compact status label — "Q4 2:30", "Final", "7:30 PM", etc. */
+  statusLabel: string
+}
+
+export interface LeagueScoreboard {
+  league: string // e.g. "basketball/nba"
+  displayName: string // e.g. "NBA"
+  games: LeagueGame[]
+}
+
+interface EspnScoreboardResponseFull {
+  events?: Array<{
+    status?: { type?: { state?: string; description?: string; shortDetail?: string } }
+    date?: string
+    competitions?: Array<{
+      status?: {
+        period?: number
+        displayClock?: string
+        type?: { state?: string; description?: string; shortDetail?: string; completed?: boolean }
+      }
+      competitors?: Array<{
+        homeAway?: 'home' | 'away'
+        team?: { abbreviation?: string }
+        score?: string
+      }>
+    }>
+  }>
+}
+
+export async function loadEspnLeagueScoreboard(
+  league: string,
+  displayName: string,
+): Promise<LeagueScoreboard> {
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${league}/scoreboard`
+  const payload = await fetchJson<EspnScoreboardResponseFull>(url, 8000)
+  const games: LeagueGame[] = []
+  for (const event of payload.events ?? []) {
+    const comp = event.competitions?.[0]
+    const competitors = comp?.competitors ?? []
+    const home = competitors.find(c => c.homeAway === 'home')
+    const away = competitors.find(c => c.homeAway === 'away')
+    if (!home || !away) continue
+    const stateRaw = (comp?.status?.type?.state ?? event.status?.type?.state ?? 'pre').toLowerCase()
+    const state: LeagueGame['state'] =
+      stateRaw === 'in' ? 'in' : stateRaw === 'post' ? 'post' : 'pre'
+    // shortDetail is ESPN's pre-formatted "Q4 2:30" / "Final" / "7:30 PM ET" string —
+    // the most reliable label across sports without per-sport reformatting.
+    const statusLabel =
+      comp?.status?.type?.shortDetail ??
+      event.status?.type?.shortDetail ??
+      formatStartsAt(event.date) ??
+      ''
+    games.push({
+      state,
+      awayAbbrev: (away.team?.abbreviation ?? '???').toUpperCase(),
+      homeAbbrev: (home.team?.abbreviation ?? '???').toUpperCase(),
+      awayScore: away.score !== undefined ? Number(away.score) : null,
+      homeScore: home.score !== undefined ? Number(home.score) : null,
+      statusLabel,
+    })
+  }
+  // Sort: live games first, then upcoming, then completed. Within each
+  // bucket keep the API's natural order (already roughly time-sorted).
+  const order = (g: LeagueGame): number => (g.state === 'in' ? 0 : g.state === 'pre' ? 1 : 2)
+  games.sort((a, b) => order(a) - order(b))
+  return { league, displayName, games }
+}
+
 export async function loadCalendar(): Promise<CalendarSnapshot> {
   if (!BRIDGE_URL) return { events: [], status: 'unconfigured' }
   return fetchJson<CalendarSnapshot>(`${BRIDGE_URL}/calendar.json`)

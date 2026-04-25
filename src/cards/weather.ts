@@ -5,6 +5,11 @@ import type { CardDefinition } from './_types'
 
 const POLL_MS = 30 * 60_000 // refresh every 30 min — open-meteo updates hourly
 
+// Optional human-readable city label. Lat/lon drive the actual forecast call;
+// this string just labels which place those coords are. Useful when the user
+// changes lat/lon for travel — the header reminds them which city is active.
+const CITY = import.meta.env.VITE_WEATHER_CITY?.trim() ?? ''
+
 // Compact 3-letter day-of-week so the line fits the right column.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -35,7 +40,7 @@ function formatDayLine(d: DailyWeather, i: number): string {
 }
 
 function format(data: unknown, error: string | null): string {
-  const title = 'WEATHER'
+  const title = CITY ? CITY.toUpperCase() : 'WEATHER'
   if (error) return formatError(title, error)
   if (!data) return formatLoading(title)
   const f = data as WeatherForecast
@@ -52,7 +57,7 @@ function format(data: unknown, error: string | null): string {
 }
 
 function formatDetail(data: unknown, error: string | null): string {
-  const title = 'WEATHER FORECAST'
+  const title = CITY ? `${CITY.toUpperCase()} — FORECAST` : 'WEATHER FORECAST'
   if (error) return formatError(title, error)
   if (!data) return formatLoading(title)
   const f = data as WeatherForecast

@@ -32,8 +32,6 @@ function format(data: unknown, error: string | null): string {
     '',
     'Top sellers:',
     ...sellerLines,
-    '',
-    `Unsold (${w.unsoldInWindow.windowDays}d): ${w.unsoldInWindow.count}`,
   ].join('\n')
 }
 
@@ -52,15 +50,6 @@ function formatDetail(data: unknown, error: string | null): string {
     for (let i = 0; i < sellers.length; i += 1) {
       const s = sellers[i]!
       lines.push(`  ${i + 1}. ${short(s.title)}  (${s.units} units)`)
-    }
-  }
-  lines.push('')
-
-  lines.push(`Unsold on Etsy (${w.unsoldInWindow.windowDays}d):`)
-  lines.push(`  ${w.unsoldInWindow.count} active listings`)
-  if (w.unsoldInWindow.sample.length > 0) {
-    for (const t of w.unsoldInWindow.sample.slice(0, 5)) {
-      lines.push(`  - ${short(t)}`)
     }
   }
 

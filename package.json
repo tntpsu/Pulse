@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "qr": "evenhub qr",
     "pack": "evenhub pack app.json dist -o pulse.ehpk",
-    "deploy": "npm run build && npm run pack && echo '\\npulse.ehpk ready: '$(pwd)'/pulse.ehpk\\nUpload to https://hub.evenrealities.com/application'"
+    "deploy": "npm run build && npm run pack && echo '\\npulse.ehpk ready: '$(pwd)'/pulse.ehpk\\nRun npm run deploy:upload to push to the portal'",
+    "deploy:upload": "node scripts/deploy-portal.mjs",
+    "deploy:full": "npm run deploy && npm run deploy:upload"
   },
   "dependencies": {
     "@evenrealities/even_hub_sdk": "^0.0.10"

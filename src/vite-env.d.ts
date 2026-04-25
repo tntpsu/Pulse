@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_PHILS_BRIDGE_URL?: string
   readonly VITE_WEATHER_LAT?: string
   readonly VITE_WEATHER_LON?: string
+  readonly VITE_WEATHER_CITY?: string
   readonly VITE_NHL_TEAM_ABBREV?: string
 }
 

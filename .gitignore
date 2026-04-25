@@ -5,6 +5,11 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.deploy
+
+# Cached portal session for scripts/deploy-portal.mjs — keeps cookies so we
+# don't have to log in on every upload. NEVER commit this file.
+.even-portal-session.json
 
 .DS_Store
 .vite/
