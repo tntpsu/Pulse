@@ -82,6 +82,14 @@ These are NOT part of Phils Home — each lives in its own repo with its own `pa
 
 **Why third:** smaller audience than #1/#2, IMU gesture detection is finicky (most of the build time goes to tuning thresholds). See **§ Plan: Recipe Assistant** below.
 
+### 5. Cue — multi-mode conversation coach ⭐ ACTIVE BUILD PLAN
+
+**Pitch:** "Helps you say the right thing." Listens to a conversation via the glasses mic, surfaces 2-3 suggested responses on the display in real time. Built-in modes for date / argument / sales / sting / listen + a custom-prompt escape hatch. The app never speaks for you — it offers cues you choose to use.
+
+**Why ahead of Live Captions:** structurally a superset (captions for free, plus the LLM coaching layer), and the date-mode "suggest topics when stuck" capability isn't shipped anywhere on Even Hub. Has a clear viral demo ("watch the glasses tell me what to say next").
+
+See **§ Plan: Cue (multi-mode conversation coach)** below for the full build spec.
+
 ### 4. Glance — Glasses Web Reader ✅ BUILT v0.4.0
 
 **Status:** sideload-ready. Lives at `~/Documents/Glance/`. Submission packet ready (`SUBMISSION.md`).
@@ -744,6 +752,183 @@ In order of expected use:
 - [ ] `.ehpk` packaged with version 1.0.0
 - [ ] Submitted to Even Hub catalog (or held in draft pending user review)
 - [ ] Demo screenshot/gif captured for the listing
+
+---
+
+## Plan: Cue (multi-mode conversation coach)
+
+This is the active build plan as of 2026-04-25. Maintain in lockstep as we build.
+
+### 1. Product summary
+
+A standalone Even Hub plugin (`com.philtullai.cue`) that captures the conversation around you via the glasses mic, transcribes it via cloud STT, and surfaces 2-3 suggested responses on the glasses display. The user picks a **mode** (Date / Argue calm / Sales close / Sting / Listen well / Custom) which configures the LLM's tone and intent. Suggestions appear reactively (after the other person stops speaking) and proactively (when you ring-tap to ask for fresh topics — useful when the conversation stalls).
+
+**Target user:** anyone who wants in-the-moment language help in a conversation — dating, difficult conversations, sales, cross-cultural interactions, ESL speakers.
+
+**Tagline:** "Helps you say the right thing."
+
+**The app never speaks for you** — it offers cues. You glance, pick (or don't), say it in your own voice. That's the line between "coach" (acceptable) and "puppet" (uncanny / unethical). All copy and UX decisions reinforce this.
+
+### 2. Modes (v1)
+
+| Mode | System-prompt intent | Reactive | Proactive |
+|---|---|---|---|
+| **Date** | Curious, warm, asks questions, surfaces topics that don't repeat | Yes, every ~10s of new speech | Yes, ring-tap on silence > 5s suggests fresh topics avoiding what's been discussed |
+| **Argue calm** | Validates, deescalates, reflects back. Detects "always/never" framing. | Yes | No |
+| **Sales close** | Tracks objections raised, suggests handlers. Avoids re-pitching covered ground. | Yes | No |
+| **Sting** | Sharp witty comebacks. Banter / low-stakes. | Yes | No |
+| **Listen well** | Reflective listening prompts ("what I hear is…", "tell me more about…"). For tense conversations where you need to slow down. | Yes | No |
+| **Custom** | User's own system prompt from phone settings. Power-user escape hatch. | Yes | Optional based on prompt |
+
+### 3. Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Even Hub plugin (TS WebView on phone)                        │
+│  - mode picker / mic toggle / privacy indicator              │
+│  - glasses UI: rolling transcript + suggestions block        │
+│  - audioControl(true) → captures PCM via SDK                 │
+│  - PCM chunks → Cue Worker (WebSocket)                       │
+└────────────────┬─────────────────────────────────────────────┘
+                 │ WebSocket (audio in)
+                 │ HTTP (suggestion requests)
+                 ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Personal Cue Cloudflare Worker (user-deployed, free tier)    │
+│  - WebSocket to Deepgram streaming STT                       │
+│  - Rolling 3-min transcript buffer                           │
+│  - On trigger: POST {mode, transcript} → Anthropic / OpenAI  │
+│  - Returns 2-3 suggestions (≤ 12 words each)                 │
+└──────────────────────────────────────────────────────────────┘
+                 │
+                 ▼
+        Cloud STT + Cloud LLM
+        (Deepgram, Anthropic Claude Haiku / OpenAI 4o-mini)
+```
+
+**Key infrastructure decision**: same pattern as Glance's worker adapter — user deploys their own Cloudflare Worker with their own Deepgram + Anthropic API keys. Glance proved this pattern works for shippable Hub apps that need server-side processing without the developer paying for everyone.
+
+### 4. Glasses display layout
+
+```
+DATE MODE                       ●     ← mic-on indicator (always visible)
+
+(the latest 2-3 lines of what
+ SHE just said, scrolling)
+
+────────────────────────────────────
+1. "What got you into that?"
+2. "I love that — tell me more
+    about how you started."
+3. "Were you always interested,
+    or did it sneak up on you?"
+
+[ring 2x] new topics  [tap] mode
+```
+
+Top half: rolling caption window. Bottom half: 1-3 suggestions, numbered. Suggestions update every ~10s while she's speaking. Hint footer.
+
+### 5. Phone-side settings UI
+
+- Mode picker (radio buttons + Custom prompt textarea)
+- Worker URL + bearer token (same as Glance's worker source)
+- Deepgram API key (set as Worker env var, not entered here)
+- Anthropic / OpenAI API key (set as Worker env var)
+- **Privacy / consent disclosure** (modal on first launch, requires explicit accept)
+- Mic-on default: OFF — user must opt in on each session
+
+### 6. Privacy & legal (real, not boilerplate)
+
+**Recording someone without consent is illegal in many jurisdictions.** US states split:
+- One-party consent (most states): the wearer alone can consent — legally fine
+- Two-party / all-party consent (CA, FL, IL, MD, MA, MT, NH, PA, WA): everyone in the conversation must know
+
+App design has to make this obvious:
+1. **Mic indicator always visible** when hot — never hidden, even on cycle
+2. **Default OFF** at every install, every relaunch
+3. **Explicit opt-in modal** on first session: "Cue will record audio to suggest responses. You are responsible for ensuring this is legal where you are. Tap I UNDERSTAND to continue."
+4. **Distinct visual cue** when actively transcribing (not just when mic is technically open)
+5. **No persistence** of audio — PCM streams to STT and is dropped, transcripts kept ≤ 3 min in Worker memory then garbage-collected
+6. **No analytics** that include transcript content
+
+This is a real feature, not lip service. Trust is the entire product.
+
+### 7. Implementation tasks (ordered)
+
+| # | Task | Detail | Est |
+|---|---|---|---|
+| 1 | Scaffold project | quickstart skill. `com.philtullai.cue` at `~/Documents/Cue/`. Reuse Glance patterns (Vite + TS + Vitest + e2e regression script) | 0.5h |
+| 2 | Mode system | `src/modes.ts` — registry of { id, label, systemPrompt, reactive, proactive }. 6 built-in modes + custom | 1h |
+| 3 | Privacy/opt-in flow | Phone-side modal on first launch, persisted "agreed:v1" flag. Modal text from § 6 | 1h |
+| 4 | Glasses UI shell | Mode picker on glasses (cycle via tap), mic indicator, rolling caption area, suggestions area | 4h |
+| 5 | Mic capture | Wrap `audioControl(true)`, ring buffer 5s, chunk 250ms PCM → emit | 2h |
+| 6 | Worker scaffold | `worker-template/` — Deepgram WS + Anthropic POST. Cribbed from Glance worker template | 4h |
+| 7 | WebSocket protocol | Plugin ↔ Worker: audio frames in, transcript+suggestions out (SSE or polling) | 3h |
+| 8 | LLM integration | Per-mode system prompts, transcript context window, dedupe past suggestions | 3h |
+| 9 | Mock mode for testing | Hardcoded suggestions on timer — works without API keys, lets user demo UX immediately | 1h |
+| 10 | Mode-cycle gesture | Tap on glasses cycles modes; ring-tap requests fresh suggestions; double-tap exits | 1h |
+| 11 | Tests | Unit: mode registry, suggestion-ring eviction, transcript buffer. e2e: mock-mode regression | 3h |
+| 12 | Build/pack/sideload + Worker deploy guide | First end-to-end test on real glasses with real API keys | 2h |
+
+**Subtotal: ~25 hours.** Comparable to the Live Captions plan; Cue is essentially the same infra plus a mode/LLM layer.
+
+### 8. v1 ship strategy (multi-version)
+
+- **v0.1.0** — Scaffold + mode picker + mic indicator + privacy opt-in + **mock mode** (timer-driven hardcoded suggestions). User can sideload, see the UX, no API keys needed. ~6h.
+- **v0.2.0** — Real STT via Worker → Deepgram. Captions visible, no LLM yet. ~6h.
+- **v0.3.0** — Real LLM via Worker → Anthropic. Mode prompts active. ~6h.
+- **v0.4.0** — Mode-cycle on glasses + ring-tap-for-topics + edge cases. ~3h.
+
+This way the user gets a sideload-able artifact at each step instead of waiting for the full 25h build.
+
+### 9. Risks (honest)
+
+| Risk | Mitigation |
+|---|---|
+| Legal — recording without consent | Privacy section above; default-off; explicit opt-in; visible mic indicator |
+| Latency — 1-3s from speech end to suggestion appearing feels lag | Streaming STT instead of batch (Deepgram interim transcripts); LLM stub generation as soon as silence detected; Anthropic Haiku is the fastest cloud LLM (~400ms typical) |
+| Cost — STT $0.0043/min + LLM ~$0.001/suggestion. Heavy use ~$2-3/day | Per-user Worker with their API keys — they pay their own bill. Free Deepgram trial $200 credit covers months for one user |
+| Battery — continuous mic + WebSocket → heavy drain | Default-off mic; auto-pause after N min idle; "session" model where user explicitly enables for a defined period |
+| LLM hallucination — suggestion gets the social context wrong | Lower-stakes if user just glances and decides not to use it; never auto-speaks. Custom mode lets users tune their own prompts |
+| Worker dependency — same pattern as Glance, same risk profile | Mock mode lets them try without committing |
+| The "manipulation" frame — coach vs. puppet | UX never speaks; suggestions are options not commands; copy reinforces "say it in your own voice" |
+
+### 10. Testing strategy
+
+**Unit (Vitest):**
+- Mode registry: every mode has required fields
+- Suggestion buffer: dedupes past suggestions, evicts at cap
+- Transcript ring buffer: appends, evicts at 3 min, retrieves window
+
+**Integration:**
+- Mock-mode path: timer fires → suggestion appears in transcript area
+- Worker handshake: WebSocket open + auth + ack
+- LLM round-trip: canned transcript + system prompt → returns 1-3 suggestions
+
+**Manual on-glasses:**
+- Real conversation on each mode
+- Privacy: mic indicator visible mirror test
+- Battery: 30-min session battery drop measurement
+
+**e2e (regression):**
+- Same simulator-automation script pattern as Glance
+- State signals: `[cue:state] mode=X mic=on/off transcribing=true/false`
+
+### 11. Skills to invoke
+
+`everything-evenhub:quickstart` (scaffold) → `everything-evenhub:device-features` (audioControl docs) → `everything-evenhub:handle-input` → `everything-evenhub:glasses-ui` → `everything-evenhub:simulator-automation` (regression) → `everything-evenhub:build-and-deploy`
+
+### 12. Definition of done for v1.0 (after the version sequence above)
+
+- [ ] All 6 built-in modes ship working
+- [ ] Custom-mode prompt editable in phone settings
+- [ ] Worker template + deploy guide tested by user
+- [ ] Privacy modal tested + persisted-agreement working
+- [ ] Mic indicator always visible when hot, default-off on launch
+- [ ] Mock mode usable without any API keys
+- [ ] e2e regression script: 100% pass against simulator
+- [ ] Battery measurement documented in README
+- [ ] Sideload-tested on real glasses for ≥ 30 min real conversation
 
 ---
 
