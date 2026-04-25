@@ -82,13 +82,17 @@ These are NOT part of Phils Home — each lives in its own repo with its own `pa
 
 **Why third:** smaller audience than #1/#2, IMU gesture detection is finicky (most of the build time goes to tuning thresholds). See **§ Plan: Recipe Assistant** below.
 
-### 4. Glasses Web Reader ⭐ ACTIVE BUILD PLAN
+### 4. Glance — Glasses Web Reader ✅ BUILT v0.1.0
 
-**Pitch:** "Browse the open web on your glasses, hands-free." Three-layer navigation — pick a saved site → see its current article list → tap one to read paginated text. No backend infrastructure required (uses free CORS-open `r.jina.ai` for both index-page and article extraction).
+**Status:** scaffolded, implemented, packed, ready to sideload. Lives at `~/Documents/Glance/`. Initial commit + Sessions A/B/C complete in 2026-04-25 overnight session. `glance.ehpk` (34815 bytes) at the repo root.
 
-**Why ahead of Lyrics Overlay etc:** confirmed-empty Even Hub niche; r.jina.ai's universal extraction (handles JS-rendered SPAs that killed our ESPN scraper) makes it viable as a true "any site" browser, not just an RSS reader. The "browse the web with your glasses" demo writes itself.
+**What works:** three-layer navigation (sources → article list → reader), phone-side settings UI to add/remove sources, paywall + bot-wall detection, 30-day article-body cache, resume-state on relaunch. End-to-end verified against Hacker News (extraction → article body fetch → pagination).
 
-See **§ Plan: Glasses Web Reader** below for the full build spec.
+**Known v1 limits documented in `~/Documents/Glance/README.md`:** ESPN bot-walls r.jina.ai (substituted with `sports.yahoo.com` in defaults), paywalled articles show a teaser + warning, r.jina.ai free tier 200/day cap.
+
+**Next user-facing step:** sideload `~/Documents/Glance/glance.ehpk` at `https://hub.evenrealities.com/application` after creating the `com.philtullai.glance` project. See README for testing flow.
+
+**v1.x / v2 queued** (still in this plan): ESPN-API adapter, auth-walled sites via personal Worker, Jina API key, iOS Share Sheet, Pocket/Readwise OAuth.
 
 ---
 
