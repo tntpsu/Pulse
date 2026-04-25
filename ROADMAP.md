@@ -1,4 +1,4 @@
-# Phils Home — Roadmap
+# Pulse — Roadmap
 
 Living document. Captures pending user actions, queued work, and detailed
 plans that are too long to keep alive in chat. Update as work moves between
@@ -40,7 +40,7 @@ These need you, not me — I cannot complete them from inside the sandbox.
 
 ---
 
-## Queued — Phils Home dashboard
+## Queued — Pulse dashboard
 
 Ordered by my recommendation. Pick whichever you want when ready.
 
@@ -62,13 +62,22 @@ Technically possible. See **§ Plan: AudioControl + wake-word** below for what i
 
 ## Queued — Standalone Even Hub apps (separate repos)
 
-These are NOT part of Phils Home — each lives in its own repo with its own `package_id`. Listed here as related work.
+These are NOT part of Pulse — each lives in its own repo with its own `package_id`. Listed here as related work.
 
-### 1. Lyrics Overlay ⭐ PRIORITY 1
+### 1. Lyrics Overlay ✅ BUILT v0.1.0 (manual song picker)
+
+**Status:** sideload-ready as `lyrics-glow.ehpk` at `~/Documents/lyrics-glow/`. v0.1.0 ships the full karaoke renderer + LRCLIB lookup with a phone-side song picker; auto-detect via Spotify OAuth deferred to v0.2.0 (needs phone-side bridge).
+
+**What's shipped (cumulative):**
+- v0.1.0: scaffold + LRC parser (binary-search line picker, multi-stamp support, dedupe) + LRCLIB HTTP client + glasses 3-line karaoke window (prev / ▶ current / next / next+1) + tap-pause-resume + swipe-bias + offset slider + last-song memory + 23 vitest unit tests + 5/5 simulator smoke regression
+
+**Still queued for v0.2+:**
+- Spotify OAuth + auto-detect "now playing" via a new `~/ai-agents/lyrics-bridge/` Python service (~4h)
+- Musixmatch fallback for tracks LRCLIB doesn't have (~2h)
 
 **Concept:** karaoke-through-glasses. Pulls currently-playing track + time-synced lyrics, scrolls them on the glasses in lockstep with the song.
 
-**Why first:** fits the "viral demo" target perfectly (TikTok-able), modest effort (~15 hours), no recurring cost concerns beyond Spotify free tier, no privacy controversy. See **§ Plan: Lyrics Overlay** below.
+See **§ Plan: Lyrics Overlay** below for the original build spec (now partially realised).
 
 ### 2. Live Captions ⭐ PRIORITY 2
 
@@ -82,13 +91,23 @@ These are NOT part of Phils Home — each lives in its own repo with its own `pa
 
 **Why third:** smaller audience than #1/#2, IMU gesture detection is finicky (most of the build time goes to tuning thresholds). See **§ Plan: Recipe Assistant** below.
 
-### 5. Cue — multi-mode conversation coach ⭐ ACTIVE BUILD PLAN
+### 5. Cue — multi-mode conversation coach ✅ BUILT v0.2.0
+
+**Status:** sideload-ready as `cue.ehpk` at `~/Documents/Cue/`. Real STT + LLM working when the personal Cloudflare Worker is deployed; mock-mode fallback for setup-free demos.
+
+**What's shipped (cumulative):**
+- v0.1.0: scaffold + 6 modes (Date / Argue calm / Sales close / Sting / Listen well / Custom) + privacy opt-in + glasses UI shell + mock-mode driver + e2e regression (4/4 passing)
+- v0.2.0: Worker template (Deepgram WS proxy + `/suggest` Anthropic/OpenAI bridge) + audio capture (`audioControl` → PCM frames over the SDK event bus) + transport layer (WebSocket for audio, REST for suggestions) + live captions + debounced LLM suggestions (~6s rolling window, 1200-char trim) + 17 vitest unit tests passing + mock fallback retained
 
 **Pitch:** "Helps you say the right thing." Listens to a conversation via the glasses mic, surfaces 2-3 suggested responses on the display in real time. Built-in modes for date / argument / sales / sting / listen + a custom-prompt escape hatch. The app never speaks for you — it offers cues you choose to use.
 
-**Why ahead of Live Captions:** structurally a superset (captions for free, plus the LLM coaching layer), and the date-mode "suggest topics when stuck" capability isn't shipped anywhere on Even Hub. Has a clear viral demo ("watch the glasses tell me what to say next").
+**Still queued for v0.3+:**
+- End-of-utterance detection so suggestions arrive at natural pauses, not on a fixed timer
+- Smarter transcript trimming (currently last 1200 chars rolling window)
+- Battery measurement + auto-pause after N min idle
+- Per-mode UI tweaks (line wrap, imperative verb emphasis)
 
-See **§ Plan: Cue (multi-mode conversation coach)** below for the full build spec.
+See **§ Plan: Cue (multi-mode conversation coach)** below for the original build spec.
 
 ### 4. Glance — Glasses Web Reader ✅ BUILT v0.4.0
 
@@ -113,7 +132,7 @@ See **§ Plan: Cue (multi-mode conversation coach)** below for the full build sp
 
 # Plans (full detail)
 
-## Plan: Image containers (Phils Home)
+## Plan: Image containers (Pulse)
 
 ### Concept
 Use the SDK's `updateImageRawData` to render 4-bit greyscale bitmap images on the glasses. Highest-value first integration: thumbnail of the duck artwork on the Approvals card detail view (way better decision signal than a title string).
@@ -160,7 +179,7 @@ Use the SDK's `updateImageRawData` to render 4-bit greyscale bitmap images on th
 
 ---
 
-## Plan: AudioControl + wake-word detection (Phils Home)
+## Plan: AudioControl + wake-word detection (Pulse)
 
 ### Concept
 Always-on mic, local wake-word detector ("hey home"), cloud STT after the wake-word fires, command routing into the existing picker actions. "Approve duck", "next card", "today".
@@ -569,7 +588,7 @@ interface ReaderState {
                                     ← swipe-end = next article in list
 ```
 
-Three layers, each is the same picker + paginated-text pattern we already built in PhilsHome. The complexity is in the extraction pipeline, not the UI.
+Three layers, each is the same picker + paginated-text pattern we already built in Pulse. The complexity is in the extraction pipeline, not the UI.
 
 **Phone-side settings view** (separate state, only visible when the user opens the plugin tile in the Even Hub companion before putting glasses on — this is a normal HTML page in the WebView):
 
@@ -644,7 +663,7 @@ attempts — his most accurate
 
 | # | Task | Detail | Est |
 |---|---|---|---|
-| 1 | Scaffold project | `everything-evenhub:quickstart` skill. package_id `com.philtullai.webreader`. Reuse the picker / paginated-text patterns from PhilsHome's `even.ts` + `main.ts` | 0.5h |
+| 1 | Scaffold project | `everything-evenhub:quickstart` skill. package_id `com.philtullai.webreader`. Reuse the picker / paginated-text patterns from Pulse's `even.ts` + `main.ts` | 0.5h |
 | 2 | Native storage layer | Wrap `bridge.setLocalStorage` / `getLocalStorage` with typed accessors for `ReaderState` and `ArticleBody` cache. Handle JSON parse errors gracefully | 1h |
 | 3 | r.jina.ai client | `fetchHomepage(url): Promise<Article[]>` and `fetchArticle(url): Promise<ArticleBody>`. Both use `https://r.jina.ai/<url>`. Parse `Title:` / `Markdown Content:` blocks from response text | 2h |
 | 4 | Homepage link extractor | Parse markdown for `[title](url)` patterns. Filter heuristics: same-domain, title 25-150 chars, URL path looks article-like (filter `/login`, `/help`, `/search`, `/category`, anchor-only links, etc.). Dedupe by URL. Sort by appearance order | 2h |
@@ -691,7 +710,7 @@ attempts — his most accurate
 - [ ] Article list comes back with 0 items — show "site returned no articles"
 - [ ] Article body is shorter than 1 page — display single page, no pagination UI
 - [ ] Article body is longer than 50 pages — cap at 50 with "[truncated]" footer
-- [ ] User flips off glasses mid-read — pause polling, resume on put-back-on (per Phils Home pattern)
+- [ ] User flips off glasses mid-read — pause polling, resume on put-back-on (per Pulse pattern)
 - [ ] Network drops mid-fetch — show transient "couldn't load, swipe to retry"
 
 **Skills to use during testing**:
@@ -874,10 +893,10 @@ This is a real feature, not lip service. Trust is the entire product.
 
 ### 8. v1 ship strategy (multi-version)
 
-- **v0.1.0** — Scaffold + mode picker + mic indicator + privacy opt-in + **mock mode** (timer-driven hardcoded suggestions). User can sideload, see the UX, no API keys needed. ~6h.
-- **v0.2.0** — Real STT via Worker → Deepgram. Captions visible, no LLM yet. ~6h.
-- **v0.3.0** — Real LLM via Worker → Anthropic. Mode prompts active. ~6h.
-- **v0.4.0** — Mode-cycle on glasses + ring-tap-for-topics + edge cases. ~3h.
+- **v0.1.0** ✅ — Scaffold + mode picker + mic indicator + privacy opt-in + **mock mode** (timer-driven hardcoded suggestions). User can sideload, see the UX, no API keys needed. *Shipped.*
+- **v0.2.0** ✅ — Real STT via Worker → Deepgram **AND** Real LLM via Worker → Anthropic Claude Haiku (collapsed v0.2 + v0.3 into one ship since the Worker is the same artifact). Mock fallback preserved. *Shipped.*
+- **v0.3.0** — End-of-utterance detection, smarter transcript trim, battery indicator, per-mode UI polish.
+- **v0.4.0** — Auto-pause-after-idle, additional mode hardening, edge cases.
 
 This way the user gets a sideload-able artifact at each step instead of waiting for the full 25h build.
 
@@ -936,5 +955,5 @@ This way the user gets a sideload-able artifact at each step instead of waiting 
 
 - Move items between sections (queued → in flight → done) as work happens
 - When a plan ships, delete it from this file (commit log has the history)
-- New plans go under either "Phils Home dashboard" (if they extend this app) or "Standalone Even Hub apps" (separate repo)
+- New plans go under either "Pulse dashboard" (if they extend this app) or "Standalone Even Hub apps" (separate repo)
 - "Pending user actions" should empty out as you complete them — don't let it stale

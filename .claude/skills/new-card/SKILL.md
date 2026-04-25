@@ -1,13 +1,13 @@
 ---
 name: new-card
-description: Scaffold a new PhilsHome card from the template, set up types and a loader stub, and register it in the card carousel. Use when adding any new card to the G2 glasses dashboard.
+description: Scaffold a new Pulse card from the template, set up types and a loader stub, and register it in the card carousel. Use when adding any new card to the G2 glasses dashboard.
 allowed-tools: [Read, Edit, Write, Bash, Grep]
 argument-hint: [card-id] [optional short description]
 ---
 
 # new-card
 
-Scaffolds a new card for the PhilsHome glasses dashboard at `~/Documents/PhilsHome/` following the existing template pattern. Cards are the atomic UI unit — one per data source, shown one-at-a-time on the right side of the G2 display.
+Scaffolds a new card for the Pulse glasses dashboard at `~/Documents/Pulse/` following the existing template pattern. Cards are the atomic UI unit — one per data source, shown one-at-a-time on the right side of the G2 display.
 
 ## What this does
 

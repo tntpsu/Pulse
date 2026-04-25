@@ -108,7 +108,7 @@ let currentItemIndex = 0
 // companion-app storage (more durable than browser localStorage on iOS); a
 // browser-localStorage path is kept for the dev-server preview where there's
 // no bridge.
-const PERSIST_KEY = 'phils-home:state:v1'
+const PERSIST_KEY = 'pulse:state:v1'
 async function loadPersistedState(): Promise<{ cardId?: string }> {
   try {
     const raw = even

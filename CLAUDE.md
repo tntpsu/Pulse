@@ -4,19 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Phils Home** — a 15-card dashboard plugin for Even Realities G2 smart glasses. Replaces the Even home screen for the user: a Today aggregate glance card, sports scores, Duck Ops business status, Google Tasks, GitHub PRs / CI, Gmail, Now Playing, Calendar, Messages. Tap to expand to detail; swipe for carousel navigation; tap on an actionable item in detail view to open a full-screen action picker (approve / reject / dry-run / complete / skip / etc.), and list-tap the chosen option to execute it. Ring-double-tap in dashboard opens the card-selector modal for jumping anywhere in the carousel without swiping through every card.
+**Pulse** (formerly Phils Home) — a 15-card dashboard plugin for Even Realities G2 smart glasses. Replaces the Even home screen for the user: a Today aggregate glance card, sports scores, Duck Ops business status, Google Tasks, GitHub PRs / CI, Gmail, Now Playing, Calendar, Messages. Tap to expand to detail; swipe for carousel navigation; tap on an actionable item in detail view to open a full-screen action picker (approve / reject / dry-run / complete / skip / etc.), and list-tap the chosen option to execute it. Ring-double-tap in dashboard opens the card-selector modal for jumping anywhere in the carousel without swiping through every card.
 
 ## Commands
 
 ```bash
 npm run dev              # Vite dev server on :5174 (host 0.0.0.0 for LAN)
 npm run build            # tsc + vite build → dist/
-npm run pack             # evenhub pack app.json dist -o phils-home.ehpk
+npm run pack             # evenhub pack app.json dist -o pulse.ehpk
 npm run deploy           # build + pack in one step (preferred)
 npx evenhub qr --url http://<mac-lan-ip>:5174   # hot-reload loop on glasses
 ```
 
-Upload the `.ehpk` manually to the `com.philtullai.philshome` project at `https://hub.evenrealities.com/application` — no CLI upload exists.
+Upload the `.ehpk` manually to the `com.philtullai.pulse` project at `https://hub.evenrealities.com/application` — no CLI upload exists.
 
 ## Architecture: the three-bucket data model
 

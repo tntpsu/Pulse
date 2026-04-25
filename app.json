@@ -1,8 +1,8 @@
 {
-  "package_id": "com.philtullai.philshome",
+  "package_id": "com.philtullai.pulse",
   "edition": "202601",
-  "name": "Phils Home",
-  "version": "0.12.0",
+  "name": "Pulse",
+  "version": "0.13.0",
   "min_app_version": "2.0.0",
   "min_sdk_version": "0.0.10",
   "entrypoint": "index.html",

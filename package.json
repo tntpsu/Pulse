@@ -1,15 +1,15 @@
 {
-  "name": "phils-home",
+  "name": "pulse",
   "private": true,
-  "version": "0.12.0",
+  "version": "0.13.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "qr": "evenhub qr",
-    "pack": "evenhub pack app.json dist -o phils-home.ehpk",
-    "deploy": "npm run build && npm run pack && echo '\\nphils-home.ehpk ready: '$(pwd)'/phils-home.ehpk\\nUpload to https://hub.evenrealities.com/application'"
+    "pack": "evenhub pack app.json dist -o pulse.ehpk",
+    "deploy": "npm run build && npm run pack && echo '\\npulse.ehpk ready: '$(pwd)'/pulse.ehpk\\nUpload to https://hub.evenrealities.com/application'"
   },
   "dependencies": {
     "@evenrealities/even_hub_sdk": "^0.0.10"

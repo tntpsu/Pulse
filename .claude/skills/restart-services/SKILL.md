@@ -7,7 +7,7 @@ argument-hint: [widget-api | phils-bridge | all (default)]
 
 # restart-services
 
-Cleanly restarts the Python HTTP services PhilsHome depends on:
+Cleanly restarts the Python HTTP services Pulse depends on:
 
 - `widget_api` — `~/ai-agents/duck-ops/runtime/widget_api.py` on port 8780 (Duck Ops read + approvals write + reject)
 - `phils-bridge` — `~/ai-agents/phils-bridge/server.py` on port 8790 (Calendar, Tasks, Gmail, GitHub, Now Playing, iMessages)
