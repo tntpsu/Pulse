@@ -17,6 +17,11 @@ export interface CardDefinition {
   id: string
   title: string
   pollMs: number
+  // Hidden cards are excluded from the swipe-carousel but still appear in the
+  // card-selector modal (ring-double-tap from dashboard). Use this for
+  // diagnostics / settings cards that the user shouldn't bump into during
+  // normal navigation.
+  hidden?: boolean
   load: () => Promise<unknown>
   format: (data: unknown, error: string | null) => string
   formatDetail?: (data: unknown, error: string | null) => string

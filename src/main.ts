@@ -390,7 +390,14 @@ function startActiveCardPoll(): void {
 }
 
 async function changeCard(delta: number): Promise<void> {
-  const next = (currentCardIndex + delta + CARDS.length) % CARDS.length
+  // Hidden cards (e.g. Troubleshoot) live in the array for the card-selector
+  // modal but the swipe-carousel skips them. Walk in `delta` direction until
+  // a visible card is found; bail if none exist (defensive — shouldn't happen).
+  let next = currentCardIndex
+  for (let step = 0; step < CARDS.length; step += 1) {
+    next = (next + delta + CARDS.length) % CARDS.length
+    if (!CARDS[next]?.hidden) break
+  }
   if (next === currentCardIndex) return
   await jumpToCard(next)
 }

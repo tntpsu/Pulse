@@ -1,3 +1,4 @@
+import { recordFetchFailure } from './diagnostics'
 import type {
   CalendarSnapshot,
   DuckOpsStatus,
@@ -47,11 +48,15 @@ async function fetchJson<T>(url: string, _timeoutMs?: number): Promise<T> {
     const response = await fetch(url, {
       headers: { Accept: 'application/json' },
     })
-    if (!response.ok) throw new Error(`HTTP ${response.status} @${hostPath}`)
+    if (!response.ok) {
+      recordFetchFailure(url, `HTTP ${response.status}`, response.status)
+      throw new Error(`HTTP ${response.status} @${hostPath}`)
+    }
     const data = (await response.json()) as T
     staleCache.set(url, { fetchedAt: Date.now(), data })
     return data
   } catch (err) {
+    recordFetchFailure(url, err)
     const cached = staleCache.get(url)
     if (cached && Date.now() - cached.fetchedAt < STALE_FALLBACK_MAX_MS) {
       const tagged = cached.data as T & StaleTag

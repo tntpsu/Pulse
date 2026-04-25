@@ -18,10 +18,10 @@ import { githubCiCard } from './github-ci'
 import { githubPrsCard } from './github-prs'
 import { gmailCard } from './gmail'
 import { nowPlayingCard } from './now-playing'
-import { aboutCard } from './about'
 import { sportsCard } from './sports'
 import { tasksCard } from './tasks'
 import { todayCard } from './today'
+import { troubleshootCard } from './troubleshoot'
 import { weatherCard } from './weather'
 import type { CardDefinition } from './_types'
 
@@ -44,5 +44,5 @@ export const CARDS: CardDefinition[] = [
   gmailCard,
   nowPlayingCard,
   calendarCard,
-  aboutCard,
+  troubleshootCard,
 ]
