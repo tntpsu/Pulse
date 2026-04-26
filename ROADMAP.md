@@ -16,7 +16,6 @@ These need you, not me — I cannot complete them from inside the sandbox.
 | Create `com.philtullai.pulse` project on Even portal + upload `pulse.ehpk` | Renamed from "Phils Home" → "Pulse" this session; package_id changed, so the next sideload is a new app, not an update of the old `philshome` slot. Old install will coexist until manually removed. | manual upload at https://hub.evenrealities.com/application |
 | Upload new `lyrics-glow.ehpk` (v0.2.0) | Auto-detect mode shipped; package_id unchanged so this is a normal version bump on the existing slot | manual upload at portal |
 | Append `GITHUB_TOKEN` + `GITHUB_REPOS` to `~/ai-agents/phils-bridge/.env` then restart bridge | Activates the github-prs and github-ci cards on Pulse — currently stuck on "no repos configured" | `echo "GITHUB_TOKEN=$(gh auth token)" >> ~/ai-agents/phils-bridge/.env; echo "GITHUB_REPOS=tntpsu/Pulse,tntpsu/Cue,tntpsu/Glance,tntpsu/lyrics-glow,tntpsu/av,tntpsu/duckAgent" >> ~/ai-agents/phils-bridge/.env; launchctl kickstart -k gui/$(id -u)/<bridge-launchd-label>` |
-| Deploy Cue Cloudflare Worker (real-mode STT + LLM) | One-time setup so Cue stops running in mock mode. OpenAI key works fine — no Anthropic required. Walkthrough in chat/Cue README. | `cd ~/Documents/Cue/worker-template && npm install && npx wrangler login && npx wrangler secret put SHARED_SECRET DEEPGRAM_API_KEY OPENAI_API_KEY && npx wrangler deploy` |
 | Restart `widget_api` | Pick up the rejection-stable-key fix and the top-3-sellers field added in the duck-ops repo | `launchctl kickstart -k "gui/$(id -u)/com.philtullai.duck-ops-widget"` |
 | Re-run Google OAuth | Current refresh token predates the `gmail.readonly` scope being added to `oauth_setup.py`. Without this, the Gmail card shows "unconfigured" | `python3 ~/ai-agents/phils-bridge/oauth_setup.py` then re-restart phils-bridge |
 | Commit duck-ops changes | `runtime/operator_interface_contracts.py` has the rejection + top-3-sellers patch; sits alongside your in-flight `etsy_browser_batch` work | Commit when convenient |
@@ -139,21 +138,23 @@ A scan of the existing Even Hub app store + GitHub community apps + Discord/Redd
 - Hardware constraints worth keeping in mind: no speaker (no audio-out apps), no camera (no CV), 4-mic array is BETTER than commenters realise, R1 ring is the only reliable rich-input vector.
 - **MentraOS** (mentraglass.com/os) is the cross-device alt platform some devs are hedging onto — worth a glance if you ever want one app to span multiple smart-glasses brands.
 
-### 5. Cue — multi-mode conversation coach ✅ BUILT v0.2.0
+### 5. Cue — multi-mode conversation coach ✅ BUILT v0.3.0
 
-**Status:** sideload-ready as `cue.ehpk` at `~/Documents/Cue/`. Real STT + LLM working when the personal Cloudflare Worker is deployed; mock-mode fallback for setup-free demos.
+**Status:** sideload-ready as `cue.ehpk` at `~/Documents/Cue/`. Real STT + LLM running through the deployed personal Cloudflare Worker; mock-mode fallback for setup-free demos.
 
 **What's shipped (cumulative):**
 - v0.1.0: scaffold + 6 modes (Date / Argue calm / Sales close / Sting / Listen well / Custom) + privacy opt-in + glasses UI shell + mock-mode driver + e2e regression (4/4 passing)
-- v0.2.0: Worker template (Deepgram WS proxy + `/suggest` Anthropic/OpenAI bridge) + audio capture (`audioControl` → PCM frames over the SDK event bus) + transport layer (WebSocket for audio, REST for suggestions) + live captions + debounced LLM suggestions (~6s rolling window, 1200-char trim) + 17 vitest unit tests passing + mock fallback retained
+- v0.2.0: Worker template (Deepgram + `/suggest` Anthropic/OpenAI bridge) + audio capture (`audioControl` → PCM frames over the SDK event bus) + transport layer + live captions + debounced LLM suggestions + mock fallback retained
+- v0.2.5: chunked HTTP transport (replaces WebSocket — WKWebView blocks WS handshake) + JSDOM tests + worker integration tests + app.json lint + KNOWN_QUIRKS doc + WebKit Playwright harness for iOS-WKWebView parity
+- v0.3.0: end-of-utterance detection (sentence-final punctuation OR silence-gap OR 12s max-wait, replacing the fixed-6s debounce) + sentence-aware transcript trim (replaces 1200-char tail-slice) + battery glyph in glasses header + idle auto-pause after 5 min + word-boundary line wrap on suggestions + per-mode bullet glyphs + first-word emphasis. 45 vitest tests passing.
 
 **Pitch:** "Helps you say the right thing." Listens to a conversation via the glasses mic, surfaces 2-3 suggested responses on the display in real time. Built-in modes for date / argument / sales / sting / listen + a custom-prompt escape hatch. The app never speaks for you — it offers cues you choose to use.
 
-**Still queued for v0.3+:**
-- End-of-utterance detection so suggestions arrive at natural pauses, not on a fixed timer
-- Smarter transcript trimming (currently last 1200 chars rolling window)
-- Battery measurement + auto-pause after N min idle
-- Per-mode UI tweaks (line wrap, imperative verb emphasis)
+**Still queued for v0.4+:**
+- Worker-side dedupe of suggestions repeating the same advice
+- Retry/backoff on Deepgram or LLM rate-limit
+- Partial-transcript pulses if streaming-Deepgram path becomes viable on WKWebView
+- Phone-side `IDLE_AUTO_PAUSE_MS` setting (currently a 5-min hardcode)
 
 **LLM key:** worker accepts either `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` (gpt-4o-mini fallback). Anthropic isn't required — if you only have an OpenAI key (e.g. the one in `~/ai-agents/duckAgent/.env`), set just that and Cue runs fine.
 
