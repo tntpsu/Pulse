@@ -123,7 +123,13 @@ async function loadPersistedState(): Promise<{ cardId?: string }> {
 function persistState(): void {
   const value = JSON.stringify({ cardId: CARDS[currentCardIndex]?.id })
   if (even) {
-    void even.setStorage(PERSIST_KEY, value)
+    // Surface bridge errors instead of swallowing them — bug caught in
+    // the audit was that storage failures were silent + the user lost
+    // their last-viewed card on next launch with no signal.
+    void even.setStorage(PERSIST_KEY, value).catch(err => {
+      // eslint-disable-next-line no-console
+      console.warn('[pulse:state] setStorage failed:', err instanceof Error ? err.message : String(err))
+    })
   } else {
     try {
       window.localStorage.setItem(PERSIST_KEY, value)
@@ -335,6 +341,11 @@ async function paint(): Promise<void> {
   ui.left.textContent = leftText
   ui.position.textContent = `${currentCardIndex + 1}/${CARDS.length}`
   ui.viewMode.textContent = viewMode
+  // [pulse:state] instrumentation — emitted on every paint so the simulator
+  // regression script (scripts/regression.mjs) can latch onto state
+  // transitions. Same pattern as Cue/Glance/lyrics-glow.
+  // eslint-disable-next-line no-console
+  console.log(`[pulse:state] view=${viewMode} card=${card.id} index=${currentCardIndex + 1}/${CARDS.length} stale=${stale ?? 'no'} loaded=${state ? '1' : '0'}`)
   // Dual-column layout: left stays visible in both modes; right changes.
   await even?.render(leftText, cardText)
 }
