@@ -45,6 +45,32 @@ These need you, not me — I cannot complete them from inside the sandbox.
 
 ---
 
+## Strategic constraints (May 2026)
+
+Hard frames that should color every "should I build X" decision. Read before browsing the queue.
+
+### 1. phils-bridge is personal-only, not productizable
+
+`~/ai-agents/phils-bridge/server.py` runs on Phil's Mac mini and exposes Phil's iMessages, Calendar, Tasks, Gmail, GitHub, Now Playing. **Anything depending on it is personal-use only — it cannot ship to a hub user, since each customer would need their own bridge.**
+
+For shippable apps, use the Cue / Glance pattern: a Cloudflare Worker the user deploys with their own API keys, OR an app that talks only to public HTTPS APIs.
+
+### 2. Don't compete with Even's first-party features
+
+Even ships first-party Translate, Teleprompter, AI summaries/Transcribe, Calendar, Reminders, and Notifications. A third-party that is *broader* than first-party will get rolled into the OS. Win by being **more specific** — a translator for a single use-case, a teleprompter that *coaches* instead of scrolling, etc. This puts existing queued items at risk: see the Live Captions callout below.
+
+### 3. Hub category density (May 2026)
+
+Saturated — don't enter without a 10× differentiator: Pomodoro/focus timers (4+), Bible/devotional readers (5+), ePub readers (5+), note-taking (5+), regional transit (~7), D&D companions (3), Bluesky viewers (2).
+
+Underserved or empty: Hearts/Spades/Euchre (no card-games beyond Solitaire/Chess), Wordle-style daily puzzle (Word Daily v0.1.0 is the seed), hands-free cooking multi-timer, real-time captioning, public-speaking coach, birdsong ID, household-sound alerts, F1 live timing.
+
+Single-incumbent (need real differentiator): Solitaire, Chess, Minesweeper, Sliding Puzzle, Bricks, 2048-like, Anki/flashcards (×2), Tesla controls (×2), workout trackers (×2), Blackjack counter (Card Counting).
+
+See **§ Viral concept bench (May 2026 research)** below for the ranked build list.
+
+---
+
 ## Recently shipped (Pulse)
 
 Latest feedback batch (commit `5912231`):
@@ -58,7 +84,9 @@ Renamed app: **Phils Home → Pulse**. `package_id` changed `com.philtullai.phil
 
 ---
 
-## Queued — Pulse dashboard
+## Queued — Pulse dashboard `[personal-only]`
+
+Pulse depends on `widget_api` (Duck Ops business state) and `phils-bridge` (Calendar/Tasks/Gmail/iMessages) — both run on Phil's Mac mini. Items below are dashboard improvements for Phil's daily use, not shippable hub apps. See **§ Strategic constraints**.
 
 Ordered by my recommendation. Pick whichever you want when ready.
 
@@ -98,11 +126,13 @@ These are NOT part of Pulse — each lives in its own repo with its own `package
 
 See **§ Plan: Lyrics Overlay** below for the original build spec (now substantially realised).
 
-### 2. Live Captions ⭐ PRIORITY 2
+### 2. Live Captions ⭐ PRIORITY 2 — RE-EVALUATE (May 2026)
 
 **Concept:** always-on mic + real-time STT, captions ambient conversation on the glasses. Accessibility hero use case + general "I never miss what was just said" appeal.
 
 **Why second:** highest "wow", but bigger build (~22 hours), genuine privacy considerations, ongoing per-minute STT cost. See **§ Plan: Live Captions** below.
+
+> **⚠️ Risk added May 2026:** Even ships first-party Translate. If they add display-side captions, this app is redundant. Decision rule: ship within 4 weeks or skip. **PrepTalk Coach** (live performance coaching, see § Viral concept bench) is the recommended substitute — reuses Cue's audio pipeline and differentiates against first-party Teleprompter rather than overlapping first-party Translate.
 
 ### 3. Recipe Assistant ⭐ PRIORITY 3
 
@@ -137,6 +167,65 @@ A scan of the existing Even Hub app store + GitHub community apps + Discord/Redd
 - Reverse-engineering track is alive (`i-soxi/even-g2-protocol`) — direct BLE bypass of Hub is technically possible if Even ever closes the gate.
 - Hardware constraints worth keeping in mind: no speaker (no audio-out apps), no camera (no CV), 4-mic array is BETTER than commenters realise, R1 ring is the only reliable rich-input vector.
 - **MentraOS** (mentraglass.com/os) is the cross-device alt platform some devs are hedging onto — worth a glance if you ever want one app to span multiple smart-glasses brands.
+
+---
+
+## Viral concept bench (May 2026 research)
+
+Supersedes the April 2026 survey above for build-order decisions. Source: external research report `even_g2_viral_app_concepts_report.pdf` (Drive folder "Even"), filtered through § Strategic constraints and Phil's existing infra (Cue audio pipeline, Word Daily v0.1.0 already shipped).
+
+### Ranked build order
+
+| # | Concept | One-line | Effort | Why this slot |
+|---|---|---|---|---|
+| 1 | **Word Daily v0.2.0** | Streaks + share grid + leaderboard on the existing daily puzzle | Low (1-2 weeks) | Already 80% built locally. Fastest viral signal. See § 6 in standalone queue + § Plan: Word Daily v0.2.0. |
+| 2 | **PrepTalk Coach** | Live private cues for pace, fillers, and timing during a talk | Med (~25h) | Reuses Cue's Worker + audio pipeline. Differentiated from first-party Teleprompter (which scrolls scripts). |
+| 3 | **Kitchen Conductor** | Hands-free labeled multi-timer for cooking | Med (~15h) | Greenfield, low privacy/legal risk, easy demo. Shareable "3 dishes, 7 timers, zero burnt sides" card. |
+| 4 | **CaptionCue** (live captions) | Real-time conversation captions for accessibility/travel | High (~22h) | High ceiling, but at risk from first-party Translate. Ship in 4 weeks or skip. Same scope as existing § Plan: Live Captions. |
+
+### Deferred (real demand, blocking risk)
+
+- **BirdCall HUD** — Merlin-class birdsong ID. 16kHz mic likely insufficient for BirdNET-class models; cloud inference adds latency. Spike before committing.
+- **Sound Sentinel** — household sound alerts (doorbell, washer, baby cry). Liability tail if positioned as safety-critical; constrain marketing carefully.
+- **PitWall F1** — live race timing. OpenF1 free tier is historical-only; live data is a legal landmine. Confirm a clean data source first.
+
+### Dropped (do not build)
+
+- Standalone teleprompter — first-party owns it.
+- Generic audio-note search — first-party Transcribe + saturated note category.
+- Stock ticker — weak virality, monochrome loses red/green, thin moat.
+- Full-rules Hearts / Spades — too much hidden state for gesture input. If you re-enter this niche later, it should be **Euchre Rush** (5-card hands, autoplay) not full trick-takers.
+
+### Concept summaries
+
+#### PrepTalk Coach
+- **Pitch:** private live coach for pace, filler words, and timing.
+- **Why glasses:** speakers can't look at a phone/laptop without breaking eye contact. Glasses show one cue ("Slow down", "3 fillers", "wrap up 2 min") without interrupting.
+- **Virality:** post-session scorecard — "I cut filler words by 42% in one week."
+- **Kill criteria:** speakers report cues raise anxiety; filler detection breaks trust; users only use pre-talk, never as a practice streak.
+- **Build leverage:** reuses Cue's Deepgram + Anthropic Worker. Effort drops because audio + transport is already solved.
+- **Demand evidence:** Orai 300K+ users, 2M+ speeches analyzed; Yoodli validates real-time pacing/filler feedback.
+
+#### Kitchen Conductor
+- **Pitch:** hands-free labeled timers that keep every dish on track.
+- **Why glasses:** wet/greasy/gloved hands. Phone is actively annoying in the kitchen.
+- **Virality:** weekly recipe-timer templates (ramen night, Thanksgiving sides). Shareable completion card.
+- **Kill criteria:** background timer alerts unreliable; users can't start a timer in <5s; feels like "just another timer."
+- **Notes:** no audio output on glasses → use phone vibration/push fallback. Text-only updates, no images.
+- **Demand evidence:** Timer+ 9M+ downloads, 40K App Store ratings; Reddit cooking-timer threads explicitly request voice timers.
+
+#### CaptionCue
+- **Pitch:** live captions for conversations in your line of sight.
+- **Why glasses:** accessibility, travel, language learners need eye contact preserved.
+- **Virality:** "Subtitles IRL" demo videos.
+- **Kill criteria:** speech-to-readable-text latency >2.5s; bad WER in cafes; first-party Translate satisfies the job before launch.
+- **Build leverage:** reuses Cue audio pipeline. Same scope as existing § Plan: Live Captions.
+- **Demand evidence:** Google Live Transcribe 1B+ downloads, 247K reviews, 120+ languages.
+
+#### Word Daily v0.2.0
+See § 6. Word Daily in the standalone queue + § Plan: Word Daily v0.2.0 below for full detail.
+
+---
 
 ### 5. Cue — multi-mode conversation coach ✅ BUILT v0.3.0
 
@@ -178,6 +267,34 @@ See **§ Plan: Cue (multi-mode conversation coach)** below for the original buil
 - Per-source delete UI for cached article bodies
 
 **Sideload path:** glance.ehpk at the repo root, upload to `https://hub.evenrealities.com/application` for the `com.philtullai.glance` project.
+
+### 6. Word Daily ✅ BUILT v0.1.0 — v0.2.0 NEXT (May 2026 priority 1)
+
+**Status:** sideload-ready as `word-daily.ehpk` at `~/Documents/WordDaily/`. v0.1.0 is the engine + UTC daily index + 6-guess puzzle + 200-word answer list + phone-side keyboard input + state persistence. Tests passing.
+
+**What's shipped:**
+- v0.1.0: scaffold + engine with duplicate-letter mark logic + UTC `dayIndex()` + per-day state persistence + phone-side input + glasses board renderer + 200-word curated answer list + vitest tests (engine + dayIndex stability)
+
+**Why this is the recommended next ship (May 2026):**
+- Already 80% built — fastest path to a viral signal.
+- No first-party Even feature competes (unlike Live Captions / CaptionCue).
+- Daily-return mechanic proven (Wordle: 4.8B plays/year per CBS).
+- Discovery threshold post-publish: ≥50 unique anonIds submitting in first 48h. Below that, listing/category problem, not product.
+
+**Queued for v0.2.0 (1-2 week build, see § Plan: Word Daily v0.2.0):**
+- All-time stats (current streak, max streak, distribution histogram)
+- Share grid generation (`■▣□` glyphs, monochrome-friendly) + clipboard copy
+- Larger word lists (~500 curated answers + ~5000 valid guesses, MIT-licensed `dwyl/english-words` source — NOT NYT's list)
+- End-of-game stats screen + midnight countdown
+- Cloudflare Worker leaderboard (anon UUID, KV storage, GET /leaderboard?day=N)
+- Hub listing assets (icon, 5 screenshots, description with "daily 5-letter puzzle" framing — never reference "Wordle")
+
+**IP guardrails (load-bearing — see § Plan):**
+- Game mechanics aren't copyrightable in the US. Game rules are not the risk.
+- The risk is using NYT's specific curated answer list. Don't.
+- Build own answer list from `dwyl/english-words` (MIT-licensed, ~370k words → filter to 5-letter common words).
+- Don't use the name "Wordle" in title, description, screenshots, or tags. "Word Daily" is fine.
+- Don't use 🟩🟨⬜ emoji palette (you're monochrome anyway — `■▣□` is correct).
 
 ---
 
@@ -999,6 +1116,149 @@ This way the user gets a sideload-able artifact at each step instead of waiting 
 - [ ] e2e regression script: 100% pass against simulator
 - [ ] Battery measurement documented in README
 - [ ] Sideload-tested on real glasses for ≥ 30 min real conversation
+
+---
+
+## Plan: Word Daily v0.2.0
+
+This is the active build plan as of 2026-05-03. Maintain in lockstep as we build.
+
+### 1. Product summary
+
+`com.philtullai.worddaily` — daily 5-letter word puzzle. v0.1.0 ships the engine + glasses board + phone keyboard + state persistence. v0.2.0 adds the **viral mechanics**: streak tracking, distribution histogram, monochrome share grid with clipboard copy, larger word lists, end-of-game stats screen, and a Cloudflare Worker leaderboard.
+
+**Goal:** ship the daily-return + shareability layer in 2 weeks. Single .ehpk update + one Cloudflare Worker.
+
+**Out of scope (v0.3+):** voice input (phone keyboard is the right call), hard mode after 7-day streak, push notifications on midnight rollover, language localization.
+
+### 2. Stats schema
+
+New file `src/stats.ts`:
+
+```ts
+export interface AllTimeStats {
+  played: number
+  won: number
+  currentStreak: number
+  maxStreak: number
+  lastDayIndex: number
+  distribution: [number, number, number, number, number, number]  // wins by attempt count 1..6
+}
+```
+
+Storage key: `word-daily:stats:v1` (separate from per-day state at `word-daily:state:v1:<dayIdx>`). On every game completion, `applyResult(stats, dayIdx, attempts, won)` and persist. Idempotency guard: same `dayIdx` applied twice does not double-count.
+
+### 3. Share grid
+
+New file `src/share.ts`. Generates monochrome share text:
+
+```
+Word Daily #421 4/6
+■ ▣ □ □ □
+■ ■ ▣ □ □
+■ ▣ ■ ▣ □
+■ ■ ■ ■ ■
+hub.evenrealities.com
+```
+
+Glyph mapping: `■` correct, `▣` present, `□` absent. End-of-game phone screen shows a SHARE button calling `navigator.clipboard.writeText(...)`. Glasses don't share — phone does.
+
+### 4. Word lists (IP-clean)
+
+Split `src/words.ts` into:
+- `src/answers.ts` — ~500 curated daily-suitable answers. Built from `dwyl/english-words` (MIT-licensed, ~370k words) filtered to: 5-letter, common (top frequency band per Google Web 1T or similar permissive corpus), no plurals/past-tense/proper-nouns/profanity. **Do not seed from NYT's list.**
+- `src/valid-guesses.ts` — ~5000 common 5-letter words from the same source (any tense, no proper nouns).
+
+Engine accepts a guess if it's in either list. Bundle size check: 5k × 6 bytes ≈ 30KB ungzipped → ~10KB gzipped.
+
+### 5. End-of-game UX
+
+Glasses (when `status !== 'playing'`):
+
+```
+WORD DAILY  Day #421
+Solved 4/6!
+
+[6-row board]
+
+Streak: 12   Max: 18
+Played: 24   Won: 21 (88%)
+
+Next puzzle in 14:32:08
+```
+
+Phone-side: same stats block + ASCII histogram (`▏▎▍▌▋▊▉█`) + SHARE button. Re-render countdown every minute via `setInterval`.
+
+### 6. Leaderboard backend
+
+New Cloudflare Worker: `word-daily-api`. Routes:
+- `POST /v1/result` — body `{dayIndex, attempts, won, anonId}` → write to KV under `day:${dayIndex}:${anonId}`.
+- `GET /v1/leaderboard?day=N` — aggregate `day:N:*` (cache 60s) → return `{totalPlayers, distribution, medianAttempts}`.
+
+KV free tier: 100k reads/day. Aggregate-with-cache stays under quota. No auth — anon ID is UUIDv4 generated client-side, stored in `word-daily:anon-id`. v1 accepts that scoreboard is gameable; v0.3 adds HMAC if anyone bothers.
+
+Wire in `src/leaderboard.ts`:
+- `postResult(dayIdx, attempts, won)` — fire-and-forget but await for consistency.
+- `fetchLeaderboard(dayIdx)` — non-blocking; render local stats first, patch worldwide stats when they arrive.
+
+`KNOWN_QUIRKS.md` entry: Worker URL must be HTTPS; Even Hub WebView blocks plain HTTP fetch.
+
+### 7. Hub listing
+
+Run `/fill-store-listing /Users/philtullai/Documents/WordDaily`. Write `store-listing.json`:
+- Category: Games & Tools
+- Tagline (≤40 char): "The daily 5-letter puzzle, on glass."
+- Description hooks: "New puzzle every day at midnight UTC", "Track your streak", "Share your solve grid"
+- Tags: `daily`, `puzzle`, `word-game`, `streak` — **NOT** `wordle`
+- Icon: 5×5 letter-grid pattern in pixel-grid editor (auto-icon path)
+
+Five 576×288 screenshots in `store-assets/`:
+1. Mid-game board (3 guesses in)
+2. Win screen with streak
+3. Share grid being copied
+4. Stats panel + distribution histogram
+5. Leaderboard "1,247 solvers today"
+
+### 8. Implementation steps (10 working days)
+
+| Day | Deliverable |
+|---|---|
+| 1 | `src/stats.ts` + `tests/stats.test.ts` (streak, max, distribution, idempotency) |
+| 2 | `src/share.ts` + clipboard wiring + tests |
+| 3 | `src/answers.ts` + `src/valid-guesses.ts` from dwyl/english-words; engine accepts both |
+| 4 | End-of-game glasses + phone screens; midnight countdown |
+| 5 | Bump to v0.2.0; `npm run deploy`; `npm run hub:upload`; `/fill-store-listing` (manual Select Build click) |
+| 6 | Cloudflare Worker scaffold; KV binding; routes + cache |
+| 7 | Glasses → Worker wiring (`src/leaderboard.ts`); anon-ID generation |
+| 8 | Listing polish: icon, screenshots, description; v0.2.1 if any post-day-5 fixes |
+| 9 | Soft launch — post once on Discord/Reddit. Watch first-48h funnel |
+| 10 | Retro. ≥50 unique anonIds = format works → v0.3 plan. <10 = discovery problem, iterate listing |
+
+### 9. Risks
+
+| Risk | Mitigation |
+|---|---|
+| Bundle size after 5k word list | Pack as `\n`-separated string + `Set` lookup if inline array bloats |
+| Worker latency on game-end | Render local stats first, patch worldwide stats when fetch resolves |
+| `navigator.clipboard.writeText` fails on iOS WebKit | Test day 2; fall back to hidden-textarea + `execCommand('copy')` |
+| Hub review delay | Bake 2 days buffer; if review takes longer, day 9 launch slips |
+| Bot/gameable leaderboard | Accepted for v1; HMAC signing in v0.3 if worth it |
+| NYT DMCA | IP guardrails in § 4 + listing copy in § 7 |
+
+### 10. Skills to invoke
+
+`everything-evenhub:glasses-ui` (text containers, layout) → `everything-evenhub:font-measurement` (board column widths) → `everything-evenhub:simulator-automation` (regression screenshots) → `everything-evenhub:build-and-deploy` → `/fill-store-listing` (listing assets) → `/ship-app` (full release pipeline)
+
+### 11. Definition of done for v0.2.0
+
+- [ ] Stats schema persisted across days, streak math correct
+- [ ] Share grid generates correctly for all win/loss combinations; clipboard copy verified on iOS WebKit
+- [ ] Answer list ≥ 500 words, valid-guesses list ≥ 5000, both built from dwyl/english-words
+- [ ] End-of-game screen renders on both glasses and phone with countdown to next puzzle
+- [ ] Worker deployed; ≥1 result posted from real device; leaderboard fetch returns aggregate
+- [ ] Hub listing has 5 screenshots, icon, tagline, description following IP guardrails
+- [ ] v0.2.x ehpk uploaded and approved; one external user has solved a puzzle
+- [ ] First-48h funnel measured; retro completed; v0.3 priority decided
 
 ---
 
