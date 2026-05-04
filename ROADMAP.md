@@ -183,6 +183,8 @@ Supersedes the April 2026 survey above for build-order decisions. Source: extern
 | 3 | **Kitchen Conductor** | Hands-free labeled multi-timer for cooking | Med (~15h) | Greenfield, low privacy/legal risk, easy demo. Shareable "3 dishes, 7 timers, zero burnt sides" card. |
 | 4 | **CaptionCue** (live captions) | Real-time conversation captions for accessibility/travel | High (~22h) | High ceiling, but at risk from first-party Translate. Ship in 4 weeks or skip. Same scope as existing § Plan: Live Captions. |
 
+(Additional priorities tracked in private repos — not listed here.)
+
 ### Deferred (real demand, blocking risk)
 
 - **BirdCall HUD** — Merlin-class birdsong ID. 16kHz mic likely insufficient for BirdNET-class models; cloud inference adds latency. Spike before committing.
