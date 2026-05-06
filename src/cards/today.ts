@@ -84,8 +84,8 @@ async function load(): Promise<TodaySnapshot> {
   }
 }
 
-function fmtCount(n: number | null): string {
-  if (n === null) return ' —'
+function fmtCount(n: number | null | undefined): string {
+  if (n === null || n === undefined) return ' —'
   return n.toString().padStart(2, ' ')
 }
 

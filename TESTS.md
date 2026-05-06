@@ -27,20 +27,24 @@ Pulse is `[personal-only]` (depends on phils-bridge + widget_api running on Phil
 
 ## By dimension (status)
 
-- **Static:** lint+tsc ✓, app-json validation ✓, network whitelist matches code TODO
-- **Unit:** existing tests cover card framework + dedupe heuristics (review coverage)
+- **Static:** lint+tsc ✓, app-json validation ✓, network whitelist consistency ✓ (cross-repo lint-app-json), secret scan ✓
+- **Unit:** **24 tests** (Pulse v0.13.0 starter) across 3 files:
+  - `tests/diagnostics.test.ts` — fetch-failure ring, host shortening (11 tests)
+  - `tests/shared.test.ts` — formatLoading + formatError (5 tests)
+  - `tests/card-framework.test.ts` — every card has required fields + paired UX optionals + format() doesn't throw on null + reasonable pollMs (8 tests + 1 .todo)
 - **E2E:** `scripts/regression.mjs` covers boot + card swipe + detail/back + state-log liveness
 - **Backend integration:** `scripts/test-backends.mjs` against widget_api + phils-bridge
 - **Performance:** display-sleep behavior is the perf-sensitive path (see KNOWN_QUIRKS section in CLAUDE.md). Bucket+flip dedupe pattern lives in main.ts.
 - **Security:** all backend traffic is LAN-only (per `feedback_duckops_widget_auth` memory). Before any non-LAN exposure, add bearer-token auth — unblocked-as-required.
 - **Privacy:** [personal-only] — broad scope acceptable
 - **Migration:** schema migrations between widget_api versions — manual verify
-- **Regression:** v0.10.x display-stays-on bug → bucket+flip dedupe pattern in main.ts
+- **Regression:** v0.10.x display-stays-on bug → bucket+flip dedupe pattern in main.ts; v0.13 today-card empty-data crash → fmtCount handles undefined (caught by smoke test)
 
 ## Outstanding gaps before next minor
 
-- [ ] Network whitelist consistency check
+- [ ] **Defensive format() across all cards** — smoke test (`tests/card-framework.test.ts` `.todo`) currently disabled because multiple cards throw on empty/malformed snapshots. Each card.format() should use `??` fallbacks for every field access. Roughly 17 cards × 5 min = ~1.5h.
 - [ ] Approval safety unit tests (confirm/dryRun gating)
 - [ ] Image container render path test (port from PREMORTEM-style field test)
 - [ ] Undo window unit test for Tasks complete/skip
 - [ ] One-active-card polling cadence test (catches the v0.x silent-render-loop regression class)
+- [ ] Bucket+flip dedupe heuristic test (move logic out of main.ts to a pure function, then unit test)
