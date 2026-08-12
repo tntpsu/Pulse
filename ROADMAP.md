@@ -110,6 +110,22 @@ Technically possible. See **§ Plan: AudioControl + wake-word** below for what i
 
 These are NOT part of Pulse — each lives in its own repo with its own `package_id`. Listed here as related work.
 
+### 0. Card Pack — Solitaire — SPIKED 2026-06-07: ship standalone, don't integrate 🃏
+
+> **Shipped since:** Card Pack **v0.4.0 (2026-06-10)** added **Bridge** — the 8th game and the v1.0 list's last trick-taking title (full auction with double/redouble, dummy play, duplicate-style scoring, simplified Standard American AI bidder). Pack now ships **8 text games** (Hearts, Euchre, Spades, Crazy Eights, Gin Rummy, Cribbage, Oh Hell, Bridge). Only Solitaire (image-rendered) remains from the v1.0 list — see below.
+>
+> **v0.4.1 (2026-08-12)** — maintenance, uploaded to the portal. Fixed a **Crazy Eights livelock** (unbounded discard recycling let a hand circulate 52 cards forever with nobody going out — no crash, just a hand that never ended; ~1 game in 200), found by new self-play soak tests. Launcher game names now start in one column (glyphs differ in width in the firmware font — platform v0.2.2 pads the glyph column); Gin Rummy / Cribbage / Oh Hell took proper symbols instead of letter placeholders. Testing grew a lot: **378 unit** (up from 284 — self-play soaks for the five games that had none), **80 e2e** which now assert gameplay *advanced* rather than merely rendered, and a new **`test:webkit`** proving the phone panel doesn't overflow at 320/390/430 px. Store screenshots captured to `store-assets/`. **Still outstanding: the Phase A hardware gate — nothing in the pack has run on real glasses yet.**
+
+**Decision:** Solitaire already exists as a **complete standalone** at `~/Documents/Solitaire/` (v0.5.3, built `solitaire.ehpk`, engine tests, image-rendered board). A spike on 2026-06-07 ran it through the Card Pack simulator toolchain and confirmed the image pipeline (`OffscreenCanvas → PNG → SDK updateImageRawData`) renders the screenshot-quality board and responds to input with zero console errors. **There is no "image library" to build — it's standard Canvas + the SDK's built-in PNG→gray4 conversion.**
+
+**Recommendation: ship the standalone as its own hub listing; do NOT fold it into Card Pack.** Folding it in would require extending `even-card-platform`'s text-only `GlassesFrame`/`Runtime`/bridge to support image containers (the standalone uses 2 image containers + a text cursor strip on the two-layer event-capture pattern) — moderate-to-large platform surgery with regression risk to the 8 shipping text games, for the modest payoff of "one launcher tile." Not worth it unless a single unified pack becomes a hard product requirement.
+
+**Open item (hardware):** real-glasses BLE repaint cost (~0.5–2s/image) is the one thing the sim can't measure; Solitaire repaints only on a move so it should be fine, but confirm on-device.
+
+**To ship the standalone:** `cd ~/Documents/Solitaire` → `npm test` + build + sim e2e + on-glasses check → `/ship-app`. (Competitor benchmark: Dustin Harmon's "Solitaire", #6 Entertainment, 87 likes.)
+
+**If integration is ever required (deferred):** Phase 1 — add an image frame to the platform contract + port `render-cards.ts`; Phase 2 — Solitaire module with a 13-pile cursor + two-step move + a "Move Assist" legal-move list. Coverage matrix + full per-game e2e.
+
 ### 1. Lyrics Overlay ✅ BUILT v0.2.0 (auto-detect Mac-side music)
 
 **Status:** sideload-ready as `lyrics-glow.ehpk` at `~/Documents/lyrics-glow/`. Auto-detect for Mac-side desktop music shipped via the existing phils-bridge `/now-playing.json` route (AppleScript polls Music + Spotify desktop apps). iPhone Spotify auto-detect deferred to v0.3 because it requires Spotify Web API OAuth.
