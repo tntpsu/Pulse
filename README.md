@@ -4,7 +4,9 @@
 
 A 15+ card glanceable dashboard for Even Realities G2 smart glasses. Replaces the Even home screen with a swipe-through carousel of cards that pull from public APIs (weather, sports), your AI agents (Duck Ops business state), and your personal services (Google Tasks, GitHub PRs, Gmail unread, Now Playing).
 
-## Status: v0.13.0
+## Status: v0.14.0 (SDK 0.0.16: tap-and-hold menu, weather at your location)
+
+> **v0.14.0 (2026-11-03):** SDK 0.0.10 → **0.0.16**, simulator 0.9.5, CLI 0.2.0; install floor is now Even app 2.2.10. Tap-and-hold opens a two-item contextual menu (Jump to card, Refresh card), so the card selector no longer needs the ring. The weather card asks the phone for its location (new `location` permission, one fix per 30 minutes) and falls back to the env coordinates when declined. `npm run test:e2e` is back: 7 simulator checks including the menu. `tests/sdk-floor.test.ts` refuses a pin below 0.0.16. The April image-detail layout is committed but dormant (no card supplies an image yet). 37 unit + 7 e2e green. `textColor` brightness tiers are deferred until checked on glasses.
 
 What's shipped (cumulative):
 - v0.1.0 → v0.13.0 cards: Today aggregate, weather, scoreboard (NFL / NBA / MLB), Duck Ops pack queue + post-agent + custom builds + customer replies, Google Tasks (3 lists), GitHub PRs, GitHub CI, Gmail unread, Now Playing, Calendar agenda, iMessage unread, Troubleshoot.
@@ -28,6 +30,7 @@ Glasses gestures:
 | Swipe up/down (detail) | Paginate within card OR change card |
 | Double-tap (detail) | Back to dashboard (override of Even convention; exit only from dashboard root) |
 | Glasses double-tap (dashboard) | Exit app |
+| Tap-and-hold (any view) | Contextual menu: Jump to card, Refresh card |
 | Ring double-tap (dashboard) | Open card-selector modal |
 
 ## Architecture: the three-bucket data model
@@ -63,9 +66,10 @@ npm run dev              # Vite on :5174
 npm run build            # tsc + vite build
 npm run pack             # evenhub pack → pulse.ehpk
 npm run deploy           # build + pack
-npm run hub:upload       # if available; otherwise upload manually
-npm run test             # vitest (currently scaffold; add tests as cards stabilize)
-npm run test:e2e         # simulator regression (needs npm run dev + simulator running)
+npm run test             # vitest (37 tests)
+npm run sim              # simulator on :9896 against the dev server
+npm run test:e2e         # simulator regression (needs npm run dev + npm run sim running)
+npx evenhub upload pulse.ehpk -m "<changelog>"   # CLI 0.2.0, after a one-time evenhub login from a real Terminal
 npm run test:backends    # live integration tests against bridge + public APIs
 npx evenhub qr --url http://<lan-ip>:5174   # QR for real-glasses hot reload
 ```
@@ -75,7 +79,9 @@ npx evenhub qr --url http://<lan-ip>:5174   # QR for real-glasses hot reload
 | File | Purpose |
 |---|---|
 | `src/main.ts` | Entry, state machine, view-mode transitions, action-picker modal |
-| `src/even.ts` | Glasses bridge wrapper (dual text containers — left frame + right card) |
+| `src/even.ts` | Glasses bridge wrapper (dual text containers — left frame + right card; contextual menu; image-detail layout; device location) |
+| `src/menu.ts` | Contextual-menu spec (ids + verb labels) |
+| `src/location.ts` | Weather coordinates: device fix with a 30-minute cache, env coordinates as fallback |
 | `src/api.ts` | Public-API + bridge fetch helpers (open-meteo, ESPN, phils-bridge, Duck Ops) |
 | `src/diagnostics.ts` | Recent-failures ring buffer for the Troubleshoot card |
 | `src/types.ts` | Shared TypeScript shapes |

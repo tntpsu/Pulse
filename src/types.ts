@@ -126,6 +126,8 @@ export interface DailyWeather {
 }
 
 export interface WeatherForecast {
+  // 'device' when the phone's location drove the forecast, 'default' for the env coordinates.
+  source?: 'device' | 'default'
   current: WeatherSnapshot
   days: DailyWeather[] // up to 5
 }

@@ -21,7 +21,7 @@
 //
 // Prereqs (run manually first):
 //   1. cd ~/Documents/Pulse && npm run dev          # Vite on :5174
-//   2. npx evenhub-simulator --automation-port 9896 http://localhost:5174
+//   2. npm run sim                                 # simulator on :9896
 //
 // Then: node scripts/regression.mjs
 
@@ -128,24 +128,31 @@ async function main() {
   // [pulse:state] markers don't exist yet (they currently don't), this
   // hangs and the timeout catches it — leaves a clear failure pointing at
   // the missing instrumentation.
-  try {
-    await waitForState(m => m.includes('view='), { timeoutMs: 5_000, label: 'boot completed' })
-    check('boot emits at least one [pulse:state] line', true)
-  } catch (err) {
-    check('boot emits at least one [pulse:state] line', false, 'main.ts missing console.log instrumentation — see DRAFT NOTICE at top')
+  // The app usually boots before this script takes its console baseline,
+  // so a state line already in the initial buffer counts as the boot render.
+  const bootedEarly = initial.some(e => typeof e.message === 'string' && e.message.includes(STATE_PREFIX) && e.message.includes('view='))
+  if (bootedEarly) {
+    check('boot emits at least one [pulse:state] line', true, 'present before baseline')
+  } else {
+    try {
+      await waitForState(m => m.includes('view='), { timeoutMs: 5_000, label: 'boot completed' })
+      check('boot emits at least one [pulse:state] line', true)
+    } catch (err) {
+      check('boot emits at least one [pulse:state] line', false, 'main.ts missing console.log instrumentation — see DRAFT NOTICE at top')
+    }
   }
 
   console.log('2. Swipe to advance card')
-  await input('swipe_down') // SDK convention: down = next
+  await input('down') // SDK convention: down = next
   try {
     const next = await waitForState(
       m => m.includes('card=') && m.includes('view=dashboard'),
       { label: 'card advanced', timeoutMs: 4_000 },
     )
     const idx = next.message.match(/index=(\d+)\/(\d+)/)
-    check('swipe_down advances card index', idx !== null, idx ? `${idx[1]}/${idx[2]}` : next.message)
+    check('swipe down advances card index', idx !== null, idx ? `${idx[1]}/${idx[2]}` : next.message)
   } catch {
-    todoSkip('swipe_down advances card index', 'no [pulse:state] index= marker yet')
+    todoSkip('swipe down advances card index', 'no [pulse:state] index= marker yet')
   }
   await screenshot('02-card-advanced')
 
@@ -181,6 +188,32 @@ async function main() {
   } else {
     todoSkip('render loop liveness', 'no state markers in window — instrument main.ts')
   }
+
+  console.log('6. Contextual menu (tap-and-hold): Jump to card opens the selector')
+  // Simulator 0.9+: context_menu opens the SDK menu (sysEvent 4, FOREGROUND_ENTER), click
+  // fires menuItemClickEvent for the focused (first) item and closes the
+  // menu (sysEvent 5, FOREGROUND_EXIT). A double_click sent too soon after
+  // that click is swallowed, so let the page settle first.
+  await input('context_menu')
+  await new Promise(r => setTimeout(r, 400))
+  await input('click')
+  await new Promise(r => setTimeout(r, 900))
+  const opened = await waitForState(m => m.includes('picker=open'), { label: 'picker open', timeoutMs: 6_000 }).catch(() => null)
+  check('menu item 1 opens the card selector', opened !== null, opened?.message ?? 'no picker=open marker')
+  await screenshot('06-menu-jump-picker')
+  await new Promise(r => setTimeout(r, 400))
+  await input('double_click')
+  const closed = await waitForState(m => m.includes('picker=closed'), { label: 'picker closed', timeoutMs: 6_000 }).catch(() => null)
+  check('double-tap cancels the selector', closed !== null && closed.message.includes('picked=none'), closed?.message ?? 'no picker=closed marker')
+
+  console.log('7. Contextual menu: Refresh card keeps the render loop alive')
+  await input('context_menu')
+  await new Promise(r => setTimeout(r, 400))
+  await input('down')
+  await input('click')
+  await new Promise(r => setTimeout(r, 900))
+  const afterRefresh = await waitForState(m => m.includes('view=dashboard'), { label: 'repaint after refresh', timeoutMs: 6_000 }).catch(() => null)
+  check('menu item 2 (refresh) repaints the dashboard', afterRefresh !== null, afterRefresh?.message ?? 'no repaint')
 
   console.log()
   console.log(`Result: ${pass} passed, ${fail} failed`)

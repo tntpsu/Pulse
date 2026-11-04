@@ -1,4 +1,5 @@
 import { recordFetchFailure } from './diagnostics'
+import { resolveCoords } from './location'
 import type {
   CalendarSnapshot,
   DuckOpsStatus,
@@ -16,8 +17,6 @@ const DUCK_OPS_URL = import.meta.env.VITE_DUCK_OPS_URL?.trim() ?? ''
 const DUCK_OPS_APPROVE_URL = DUCK_OPS_URL.replace(/widget-status\.json$/, 'approvals/approve')
 const DUCK_OPS_REJECT_URL = DUCK_OPS_URL.replace(/widget-status\.json$/, 'approvals/reject')
 const BRIDGE_URL = (import.meta.env.VITE_PHILS_BRIDGE_URL?.trim() ?? '').replace(/\/$/, '')
-const WEATHER_LAT = import.meta.env.VITE_WEATHER_LAT?.trim() ?? '40.4406'
-const WEATHER_LON = import.meta.env.VITE_WEATHER_LON?.trim() ?? '-79.9959'
 
 // No AbortController — the Even WebView's fetch to LAN IPs on a packaged .ehpk
 // takes longer than a short client-side timeout (Duck Ops proved this by using
@@ -126,11 +125,12 @@ const WEATHER_CODE_LABELS: Record<number, string> = {
 }
 
 export async function loadWeather(): Promise<WeatherSnapshot> {
+  const { coords } = await resolveCoords()
   // Build via URLSearchParams so commas and other reserved chars are
   // percent-encoded — iOS WKWebView's fetch is strict about this on some URLs.
   const params = new URLSearchParams({
-    latitude: WEATHER_LAT,
-    longitude: WEATHER_LON,
+    latitude: coords.lat,
+    longitude: coords.lon,
     current: 'temperature_2m,weather_code',
     temperature_unit: 'fahrenheit',
   })
@@ -145,9 +145,10 @@ export async function loadWeather(): Promise<WeatherSnapshot> {
 }
 
 export async function loadWeatherForecast(): Promise<import('./types').WeatherForecast> {
+  const { coords, source } = await resolveCoords()
   const params = new URLSearchParams({
-    latitude: WEATHER_LAT,
-    longitude: WEATHER_LON,
+    latitude: coords.lat,
+    longitude: coords.lon,
     current: 'temperature_2m,weather_code',
     daily: 'temperature_2m_max,temperature_2m_min,weather_code',
     forecast_days: '5',
@@ -171,7 +172,7 @@ export async function loadWeatherForecast(): Promise<import('./types').WeatherFo
     lo: Math.round(lows[i] ?? 0),
     conditionLabel: WEATHER_CODE_LABELS[codes[i] ?? 0] ?? 'Unknown',
   }))
-  return { current, days }
+  return { current, days, source }
 }
 
 interface EspnScoreboardResponse {

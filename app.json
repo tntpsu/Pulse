@@ -2,11 +2,15 @@
   "package_id": "com.philtullai.pulse",
   "edition": "202601",
   "name": "Pulse",
-  "version": "0.13.0",
-  "min_app_version": "2.0.0",
-  "min_sdk_version": "0.0.10",
+  "version": "0.14.0",
+  "min_app_version": "2.2.10",
+  "min_sdk_version": "0.0.16",
   "entrypoint": "index.html",
   "permissions": [
+    {
+      "name": "location",
+      "desc": "Reads your phone's approximate location once every 30 minutes so the weather card shows the forecast where you are. Used only to build the open-meteo request; never stored or sent anywhere else. If declined, the weather falls back to the configured home coordinates."
+    },
     {
       "name": "network",
       "desc": "Fetches Duck Ops dashboard data from widget_api (8780) and phils-bridge (8790) on the Mac mini, reachable via Tailscale (works on Wi-Fi + cellular). LAN entries kept for fallback. Plus open-meteo weather and ESPN sports public APIs.",

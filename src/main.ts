@@ -3,6 +3,8 @@ import './style.css'
 import { loadWeather, probeServiceHealth, staleAgeLabel, type ServiceHealth } from './api'
 import { CARDS, type ActionResult, type CardDefinition, type PickerOption } from './cards/index'
 import { fetchImageAsPngBytes } from './cards/_image'
+import { setLocationProvider } from './location'
+import { MENU_JUMP, MENU_REFRESH, PULSE_MENU } from './menu'
 import {
   connectEvenRuntime,
   type DeviceStatusSnapshot,
@@ -473,7 +475,11 @@ async function openCardSelector(): Promise<void> {
     const labels = CARDS.map((c, i) => (i === currentCardIndex ? `> ${c.title}` : c.title))
     // Header includes the running app version so the user can confirm at a
     // glance that the install actually picked up the latest .ehpk.
+    // eslint-disable-next-line no-console
+    console.log(`[pulse:state] picker=open options=${labels.length}`)
     const pickedIndex = await even.openPicker(`Jump to card · v${__APP_VERSION__}`, labels)
+    // eslint-disable-next-line no-console
+    console.log(`[pulse:state] picker=closed picked=${pickedIndex ?? 'none'}`)
     if (pickedIndex === null) return // cancelled
     if (pickedIndex === currentCardIndex) return
     await jumpToCard(pickedIndex)
@@ -650,7 +656,8 @@ ui.refresh.addEventListener('click', () => void refreshActiveCard())
 // which broke the packaged .ehpk (fine in Vite dev but fatal on install).
 const initialLeft = formatLeft()
 const initialRight = formatCardOutput()
-const even = await connectEvenRuntime(initialLeft, initialRight)
+const even = await connectEvenRuntime(initialLeft, initialRight, PULSE_MENU)
+if (even) setLocationProvider(() => even.getLocation())
 
 // Restore the last-viewed card from native storage now that the bridge is
 // available. Done before initial paint so the user sees the right card on
@@ -690,7 +697,11 @@ window.setInterval(() => void refreshServiceHealth(), HEALTH_POLL_MS)
 
 if (even) {
   ui.note.textContent =
-    'Glasses connected. Tap = enter detail, or open action picker on an actionable item. Swipe = nav/paginate. Glasses 2-tap = exit app. Ring 2-tap = back to dashboard.'
+    'Glasses connected. Tap = enter detail, or open action picker on an actionable item. Swipe = nav/paginate. Tap-and-hold = menu (Jump to card, Refresh card). Glasses 2-tap = exit app. Ring 2-tap = back to dashboard.'
+  even.onMenuSelect(id => {
+    if (id === MENU_JUMP) void openCardSelector()
+    else if (id === MENU_REFRESH) void refreshActiveCard()
+  })
   even.onTap((_source: InputSource) => {
     void handlePrimaryTap()
   })

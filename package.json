@@ -1,7 +1,7 @@
 {
   "name": "pulse",
   "private": true,
-  "version": "0.13.0",
+  "version": "0.14.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,17 +12,19 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:backends": "node scripts/test-backends.mjs",
-    "pack": "node scripts/lint-app-json.mjs && evenhub pack app.json dist -o pulse.ehpk",
+    "pack": "node scripts/lint-app-json.mjs && evenhub pack app.json dist -o pulse.ehpk --sdk-ver $(node -p \"require('./node_modules/@evenrealities/even_hub_sdk/package.json').version\")",
+    "sim": "node node_modules/@evenrealities/evenhub-simulator/bin/index.js --automation-port 9896 http://localhost:5174",
+    "test:e2e": "node scripts/regression.mjs",
     "deploy": "npm run build && npm run pack && echo '\\npulse.ehpk ready: '$(pwd)'/pulse.ehpk\\nRun npm run deploy:upload to push to the portal'",
     "deploy:upload": "node scripts/deploy-portal.mjs",
     "deploy:full": "npm run deploy && npm run deploy:upload"
   },
   "dependencies": {
-    "@evenrealities/even_hub_sdk": "^0.0.10"
+    "@evenrealities/even_hub_sdk": "0.0.16"
   },
   "devDependencies": {
-    "@evenrealities/evenhub-cli": "^0.1.11",
-    "@evenrealities/evenhub-simulator": "^0.7.2",
+    "@evenrealities/evenhub-cli": "^0.2.0",
+    "@evenrealities/evenhub-simulator": "^0.9.5",
     "jsdom": "^29.0.2",
     "typescript": "^5.8.3",
     "vite": "^7.1.7",

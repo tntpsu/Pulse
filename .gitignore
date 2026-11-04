@@ -20,3 +20,4 @@ npm-debug.log*
 .vscode/
 
 .claude/settings.local.json
+tests/screenshots-regression/

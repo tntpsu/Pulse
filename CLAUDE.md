@@ -13,10 +13,12 @@ npm run dev              # Vite dev server on :5174 (host 0.0.0.0 for LAN)
 npm run build            # tsc + vite build → dist/
 npm run pack             # evenhub pack app.json dist -o pulse.ehpk
 npm run deploy           # build + pack in one step (preferred)
+npm run sim              # simulator on :9896 (launched by path; npx evenhub-simulator 404s)
+npm run test:e2e         # simulator regression, needs dev + sim running
 npx evenhub qr --url http://<mac-lan-ip>:5174   # hot-reload loop on glasses
 ```
 
-Upload the `.ehpk` manually to the `com.philtullai.pulse` project at `https://hub.evenrealities.com/application` — no CLI upload exists.
+Upload with `npx evenhub upload pulse.ehpk -m "<changelog>"` (CLI 0.2.0+, after a one-time `evenhub login` from a real Terminal window; builds land as Private). The portal at `https://hub.evenrealities.com/application` is still needed to attach the build to the listing and to publish.
 
 ## Architecture: the three-bucket data model
 
@@ -75,6 +77,7 @@ The G2 temple + optional R1 ring give us 6 usable inputs. Current assignments:
 | Single tap (while UNDO window is open) | Fire the undo closure of the last action |
 | Double tap (detail, EITHER source) | Back to dashboard. Overrides the Even "glasses-double-tap = exit" convention because the user prefers not to lose their place when reading a card. Exit is still reachable from dashboard via glasses-2-tap. |
 | Glasses double tap (dashboard) | System exit dialog |
+| Tap-and-hold (any view) | Contextual menu, `src/menu.ts`: Jump to card (opens the card-selector modal without a ring), Refresh card. No exit item: store submission forbids one. |
 | Ring double tap (dashboard) | **Open the card-selector modal** (jump to any card in the carousel) |
 | Swipe up/down (dashboard) | Prev/next card |
 | Swipe up/down (detail, item-paginated card) | Prev/next item within card |
@@ -112,7 +115,7 @@ Ring vs glasses is distinguished by `event.sysEvent.eventSource` (`TOUCH_EVENT_F
 ## Important conventions (don't break these)
 
 - **Serialize all bridge writes.** The SDK docs warn that concurrent `textContainerUpgrade` calls crash the BLE link. `src/even.ts` uses an `enqueue()` mutex — all renders go through it.
-- **SDK is v0.0.10.** `setBackgroundState` / `onBackgroundRestore` documented in the plugin's `background-state` skill do NOT exist in this version. Re-fetch on `FOREGROUND_ENTER_EVENT` instead.
+- **SDK is 0.0.16, pinned exactly; `tests/sdk-floor.test.ts` refuses anything lower.** `setBackgroundState` / `onBackgroundRestore` from the plugin's `background-state` skill still do not exist; re-fetch on `FOREGROUND_ENTER_EVENT` instead. The contextual menu rides on every create / rebuild in `src/even.ts` (an omitted `menuObject` on rebuild clears it); the picker page deliberately omits it. Weather coordinates come from `src/location.ts` (device fix via `getAppLocation`, env fallback), not from `api.ts` constants.
 - **One active card polls.** `startActiveCardPoll()` restarts the per-card timer on card change; swiping away stops the previous card's polling.
 - **Cache shared data sources.** `loadDuckOps()` caches for 30s so the 6+ Duck Ops cards don't each hit `/widget-status.json` on swipe.
 - **Update `app.json` `permissions.network.whitelist`** when you add a new host. Packaged `.ehpk` blocks non-whitelisted fetches.

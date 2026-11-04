@@ -1,4 +1,5 @@
 import {
+  AppLocationAccuracy,
   CreateStartUpPageContainer,
   EventSourceType,
   ImageContainerProperty,
@@ -7,12 +8,18 @@ import {
   LAUNCH_SOURCE_GLASSES_MENU,
   ListContainerProperty,
   ListItemContainerProperty,
+  MenuContainerProperty,
+  MenuItemProperty,
   OsEventTypeList,
   RebuildPageContainer,
   TextContainerProperty,
   TextContainerUpgrade,
+  isMenuNameWithinLimit,
+  isValidMenuItemID,
   waitForEvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
+import type { DeviceLocation } from './location'
+import type { MenuSpec } from './menu'
 
 const LEFT_ID = 1
 const LEFT_NAME = 'left'
@@ -73,6 +80,12 @@ export interface EvenRuntime {
   onForeground: (handler: () => void) => void
   onDeviceStatus: (handler: (status: DeviceStatusSnapshot) => void) => void
   onLaunchSource: (handler: (kind: LaunchSourceKind) => void) => void
+  // Contextual menu (tap-and-hold) selection, by the MenuSpec id passed to
+  // connectEvenRuntime. Unsupported firmware never fires it.
+  onMenuSelect: (handler: (itemID: number) => void) => void
+  // One-shot phone location, null when the host has none or the user
+  // declined the `location` permission.
+  getLocation: () => Promise<DeviceLocation | null>
   // Modal picker — rebuilds the page to a full-screen list container and
   // resolves with the selected index (or null if the user double-taps to
   // cancel). After resolving, the original two-column layout is restored
@@ -108,6 +121,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 export async function connectEvenRuntime(
   initialLeft: string,
   initialRight: string,
+  menu: readonly MenuSpec[] = [],
 ): Promise<EvenRuntime | null> {
   let bridge: Awaited<ReturnType<typeof waitForEvenAppBridge>>
   try {
@@ -115,6 +129,22 @@ export async function connectEvenRuntime(
   } catch {
     return null
   }
+
+  // A malformed menu makes the firmware reject the whole page, so entries
+  // are filtered with the SDK's predicates before any page is built. The
+  // same object rides along on every create / rebuild, because an omitted
+  // menuObject on rebuild clears the custom menu.
+  const seen = new Set<number>()
+  const menuItems = menu.filter(m => {
+    const ok = isValidMenuItemID(m.id) && isMenuNameWithinLimit(m.label) && !seen.has(m.id)
+    if (ok) seen.add(m.id)
+    return ok
+  }).slice(0, 10)
+  const menuObject = menuItems.length > 0
+    ? new MenuContainerProperty({
+      menuItems: menuItems.map(m => new MenuItemProperty({ itemName: m.label, itemID: m.id })),
+    })
+    : undefined
 
   // Per glasses-ui skill: exactly one container must have isEventCapture: 1.
   // We put it on the RIGHT container since that's where swipes carry meaning
@@ -152,6 +182,7 @@ export async function connectEvenRuntime(
     new CreateStartUpPageContainer({
       containerTotalNum: 2,
       textObject: [leftText, rightText],
+      menuObject,
     }),
   )
   if (created !== 0) {
@@ -176,6 +207,7 @@ export async function connectEvenRuntime(
       new CreateStartUpPageContainer({
         containerTotalNum: 1,
         textObject: [single],
+        menuObject,
       }),
     )
     if (fallback !== 0) return null
@@ -242,6 +274,7 @@ export async function connectEvenRuntime(
   let swipeHandler: ((dir: SwipeDirection, source: InputSource) => void) | null = null
   let doubleTapHandler: ((source: InputSource) => void) | null = null
   let foregroundHandler: (() => void) | null = null
+  let menuHandler: ((itemID: number) => void) | null = null
   let deviceStatusHandler: ((status: DeviceStatusSnapshot) => void) | null = null
   let launchSourceHandler: ((kind: LaunchSourceKind) => void) | null = null
   // When non-null, a modal picker is open. All input events route through it
@@ -299,6 +332,11 @@ export async function connectEvenRuntime(
       }
       return
     }
+    if (event.menuItemClickEvent) {
+      const id = event.menuItemClickEvent.itemID
+      if (typeof id === 'number') menuHandler?.(id)
+      return
+    }
     if (event.textEvent) {
       const t = event.textEvent.eventType ?? 0
       if (t === OsEventTypeList.SCROLL_TOP_EVENT) swipeHandler?.('up', 'unknown')
@@ -345,6 +383,7 @@ export async function connectEvenRuntime(
       await bridge.rebuildPageContainer(new RebuildPageContainer({
         containerTotalNum: 2,
         textObject: [left, right],
+        menuObject,
       }))
       currentLayout = 'normal'
       return
@@ -358,6 +397,7 @@ export async function connectEvenRuntime(
     await bridge.rebuildPageContainer(new RebuildPageContainer({
       containerTotalNum: 1,
       textObject: [single],
+      menuObject,
     }))
     currentLayout = 'normal'
   }
@@ -386,6 +426,7 @@ export async function connectEvenRuntime(
       containerTotalNum: 3,
       textObject: [left, detailText],
       imageObject: [image],
+      menuObject,
     }))
     currentLayout = 'image-detail'
     lastRightSent = text
@@ -534,6 +575,18 @@ export async function connectEvenRuntime(
     },
     onLaunchSource(handler) {
       launchSourceHandler = handler
+    },
+    onMenuSelect(handler) {
+      menuHandler = handler
+    },
+    async getLocation() {
+      try {
+        const loc = await bridge.getAppLocation({ accuracy: AppLocationAccuracy.Low, timeoutMs: 8_000 })
+        if (!loc) return null
+        return { latitude: loc.latitude, longitude: loc.longitude }
+      } catch {
+        return null
+      }
     },
     openPicker,
     async exitApp() {

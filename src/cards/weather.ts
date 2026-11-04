@@ -39,11 +39,18 @@ function formatDayLine(d: DailyWeather, i: number): string {
   return `${day} ${hilo} ${shortCond(d.conditionLabel)}`
 }
 
+// The env city label only describes the env coordinates; a device fix
+// may be anywhere, so it gets a generic header instead of a wrong city.
+function titleFor(f: WeatherForecast | null, suffix = ''): string {
+  if (f?.source === 'device') return `WEATHER HERE${suffix}`
+  return (CITY ? CITY.toUpperCase() : 'WEATHER') + suffix
+}
+
 function format(data: unknown, error: string | null): string {
-  const title = CITY ? CITY.toUpperCase() : 'WEATHER'
+  const f = (data as WeatherForecast | undefined) ?? null
+  const title = titleFor(f)
   if (error) return formatError(title, error)
-  if (!data) return formatLoading(title)
-  const f = data as WeatherForecast
+  if (!f) return formatLoading(title)
   const lines: string[] = [
     title,
     `${f.current.temperatureF}F  ${f.current.conditionLabel}`,
@@ -57,10 +64,10 @@ function format(data: unknown, error: string | null): string {
 }
 
 function formatDetail(data: unknown, error: string | null): string {
-  const title = CITY ? `${CITY.toUpperCase()} — FORECAST` : 'WEATHER FORECAST'
+  const f = (data as WeatherForecast | undefined) ?? null
+  const title = f?.source === 'device' ? 'FORECAST HERE' : titleFor(null, ' — FORECAST')
   if (error) return formatError(title, error)
-  if (!data) return formatLoading(title)
-  const f = data as WeatherForecast
+  if (!f) return formatLoading(title)
   const lines: string[] = [
     title,
     '',
