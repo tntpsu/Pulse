@@ -97,5 +97,9 @@ export const duckOpsApprovalsCard: CardDefinition = {
   formatDetail,
   getItems: data => (data as DuckOpsStatus).pendingApprovals,
   formatItem,
+  getImage: item => {
+    const a = item as DuckOpsPendingApproval
+    return a.previewImageUrl ? { url: a.previewImageUrl } : null
+  },
   getActions: approvalActions,
 }

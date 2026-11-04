@@ -2,6 +2,7 @@ import './style.css'
 
 import { loadWeather, probeServiceHealth, staleAgeLabel, type ServiceHealth } from './api'
 import { CARDS, type ActionResult, type CardDefinition, type PickerOption } from './cards/index'
+import { fetchImageAsPngBytes } from './cards/_image'
 import {
   connectEvenRuntime,
   type DeviceStatusSnapshot,
@@ -346,8 +347,41 @@ async function paint(): Promise<void> {
   // transitions. Same pattern as Cue/Glance/lyrics-glow.
   // eslint-disable-next-line no-console
   console.log(`[pulse:state] view=${viewMode} card=${card.id} index=${currentCardIndex + 1}/${CARDS.length} stale=${stale ?? 'no'} loaded=${state ? '1' : '0'}`)
+
+  // Image path: only attempted in detail mode for cards that declare
+  // getImage AND have an active item with an image URL. The pipeline is
+  // fire-and-await — failures fall back transparently to text-only.
+  const imageReq = wantsImage(card)
+  if (imageReq) {
+    let imageBytes: Uint8Array | null = null
+    try {
+      imageBytes = await fetchImageAsPngBytes({ url: imageReq.url, width: 128, height: 128 })
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(`[pulse:image] fetch failed for ${imageReq.url}:`, err instanceof Error ? err.message : err)
+    }
+    await even?.renderDetailWithImage(cardText, imageBytes)
+    return
+  }
   // Dual-column layout: left stays visible in both modes; right changes.
   await even?.render(leftText, cardText)
+}
+
+/** Returns the image request for the active item if all of:
+ *   - We're in detail mode
+ *   - The card defines getImage
+ *   - There's an active item (item-paginated card)
+ *   - getImage(item) returns a non-null url
+ *  Otherwise null (text-only path). */
+function wantsImage(card: CardDefinition): { url: string } | null {
+  if (viewMode !== 'detail') return null
+  if (!card.getImage) return null
+  const items = currentItems(card)
+  if (!items || items.length === 0) return null
+  clampItemIndex()
+  const item = items[currentItemIndex]
+  if (item === undefined) return null
+  return card.getImage(item)
 }
 
 async function fetchCard(card: CardDefinition): Promise<void> {

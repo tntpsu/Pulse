@@ -40,4 +40,11 @@ export interface CardDefinition {
   // Override the synthesized two-option picker with a fully custom action list.
   // When present, confirmAction / rejectAction are ignored.
   getActions?: (item: unknown) => PickerOption[]
+  // Optional thumbnail for the active item in detail mode. When present,
+  // main.ts fetches + dithers the image (via cards/_image.ts) and uses
+  // even.renderDetailWithImage instead of renderDetail. Returning null
+  // (e.g. for items that don't have an artwork URL) falls back to text-
+  // only detail seamlessly. The image is fixed at 128×128 — that's the
+  // size of the upper-right block in the detail-with-image layout.
+  getImage?: (item: unknown) => { url: string } | null
 }

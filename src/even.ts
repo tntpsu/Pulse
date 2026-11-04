@@ -1,6 +1,8 @@
 import {
   CreateStartUpPageContainer,
   EventSourceType,
+  ImageContainerProperty,
+  ImageRawDataUpdate,
   LAUNCH_SOURCE_APP_MENU,
   LAUNCH_SOURCE_GLASSES_MENU,
   ListContainerProperty,
@@ -16,6 +18,8 @@ const LEFT_ID = 1
 const LEFT_NAME = 'left'
 const RIGHT_ID = 2
 const RIGHT_NAME = 'right'
+const IMAGE_ID = 3
+const IMAGE_NAME = 'detail_img'
 const BRIDGE_TIMEOUT_MS = 4000
 
 // Two-column layout on the 576x288 canvas:
@@ -25,6 +29,16 @@ const LEFT_WIDTH = 240
 const RIGHT_X = 240
 const RIGHT_WIDTH = 576 - RIGHT_X
 const HEIGHT = 288
+
+// Detail-with-image layout: image takes the upper-right block, text below.
+//   LEFT:        x=0,   w=240, h=288  (unchanged)
+//   IMAGE:       x=240, w=128, h=128  (top-right, left-aligned in right column)
+//   DETAIL TEXT: x=240, w=336, h=160  (below image, full right-column width)
+// Image container's max per SDK is 288×144 — 128×128 sits comfortably inside.
+const IMAGE_W = 128
+const IMAGE_H = 128
+const DETAIL_TEXT_Y = IMAGE_H
+const DETAIL_TEXT_H = HEIGHT - IMAGE_H
 
 export type SwipeDirection = 'up' | 'down'
 export type InputSource = 'glasses' | 'ring' | 'unknown'
@@ -48,6 +62,11 @@ export interface UserInfoSnapshot {
 export interface EvenRuntime {
   render: (left: string, right: string) => Promise<void>
   renderDetail: (text: string) => Promise<void>
+  /** Detail-mode render with a thumbnail in the upper-right and text below.
+   *  Rebuilds the page (brief flicker — not flicker-free like
+   *  `renderDetail`). Pass `imageBytes = null` to fall back to text-only;
+   *  in that case this is functionally equivalent to `renderDetail`. */
+  renderDetailWithImage: (text: string, imageBytes: Uint8Array | null) => Promise<void>
   onTap: (handler: (source: InputSource) => void) => void
   onSwipe: (handler: (dir: SwipeDirection, source: InputSource) => void) => void
   onDoubleTap: (handler: (source: InputSource) => void) => void
@@ -168,6 +187,15 @@ export async function connectEvenRuntime(
   let lastRightLen = initialRight.length
   let lastCombinedSent = `${initialLeft}\n\n— — — — — — — — — — —\n\n${initialRight}`
   let lastCombinedLen = lastCombinedSent.length
+
+  // Layout state. Each transition between modes pays a brief
+  // rebuildPageContainer flicker; in-mode updates are flicker-free.
+  type Layout = 'normal' | 'image-detail' | 'picker'
+  let currentLayout: Layout = 'normal'
+  // Last image bytes pushed via updateImageRawData. Used to skip the slow
+  // BLE image-push when staying on the same item — same Uint8Array
+  // reference returned from cards/_image.ts cache means same image.
+  let lastImageBytes: Uint8Array | null = null
 
   let busy = Promise.resolve()
   function enqueue<T>(work: () => Promise<T>): Promise<T> {
@@ -318,6 +346,7 @@ export async function connectEvenRuntime(
         containerTotalNum: 2,
         textObject: [left, right],
       }))
+      currentLayout = 'normal'
       return
     }
     const single = new TextContainerProperty({
@@ -330,6 +359,47 @@ export async function connectEvenRuntime(
       containerTotalNum: 1,
       textObject: [single],
     }))
+    currentLayout = 'normal'
+  }
+
+  /** Rebuild to image-detail layout: left clock column unchanged, right
+   *  column split into image (top) + text (bottom). After the rebuild,
+   *  push the image bytes via updateImageRawData. */
+  async function rebuildToImageDetail(text: string, imageBytes: Uint8Array): Promise<void> {
+    const left = new TextContainerProperty({
+      xPosition: 0, yPosition: 0, width: LEFT_WIDTH, height: HEIGHT,
+      borderWidth: 0, borderColor: 5, paddingLength: 6,
+      containerID: LEFT_ID, containerName: LEFT_NAME,
+      content: lastLeftSent, isEventCapture: 0,
+    })
+    const detailText = new TextContainerProperty({
+      xPosition: RIGHT_X, yPosition: DETAIL_TEXT_Y, width: RIGHT_WIDTH, height: DETAIL_TEXT_H,
+      borderWidth: 1, borderColor: 8, borderRadius: 4, paddingLength: 6,
+      containerID: RIGHT_ID, containerName: RIGHT_NAME,
+      content: text, isEventCapture: 1,
+    })
+    const image = new ImageContainerProperty({
+      xPosition: RIGHT_X, yPosition: 0, width: IMAGE_W, height: IMAGE_H,
+      containerID: IMAGE_ID, containerName: IMAGE_NAME,
+    })
+    await bridge.rebuildPageContainer(new RebuildPageContainer({
+      containerTotalNum: 3,
+      textObject: [left, detailText],
+      imageObject: [image],
+    }))
+    currentLayout = 'image-detail'
+    lastRightSent = text
+    lastRightLen = text.length
+
+    // Push the image bytes. Slow (~0.5–2 s over BLE) — only happens when
+    // we transition INTO image-detail with a different image, not on
+    // every render of the same card.
+    await bridge.updateImageRawData(new ImageRawDataUpdate({
+      containerID: IMAGE_ID,
+      containerName: IMAGE_NAME,
+      imageData: Array.from(imageBytes),
+    }))
+    lastImageBytes = imageBytes
   }
 
   async function openPicker(header: string, options: string[]): Promise<number | null> {
@@ -393,6 +463,7 @@ export async function connectEvenRuntime(
     render(left, right) {
       if (dualOk) {
         return enqueue(async () => {
+          if (currentLayout === 'image-detail') await rebuildToNormal()
           await writeLeft(left)
           await writeRight(right)
         })
@@ -401,8 +472,50 @@ export async function connectEvenRuntime(
       return enqueue(() => writeCombined(`${left}\n\n— — — — — — — — — — —\n\n${right}`))
     },
     renderDetail(text) {
-      if (dualOk) return enqueue(() => writeRight(text))
+      if (dualOk) {
+        return enqueue(async () => {
+          if (currentLayout === 'image-detail') await rebuildToNormal()
+          await writeRight(text)
+        })
+      }
       return enqueue(() => writeCombined(text))
+    },
+    renderDetailWithImage(text, imageBytes) {
+      // Falls back gracefully — text-only path works even when an image
+      // failed to fetch / decode upstream.
+      if (!imageBytes) {
+        if (dualOk) {
+          return enqueue(async () => {
+            if (currentLayout === 'image-detail') await rebuildToNormal()
+            await writeRight(text)
+          })
+        }
+        return enqueue(() => writeCombined(text))
+      }
+      // Image variant only available in dual-container mode (the single-
+      // container fallback runs on glasses where dual rebuild failed —
+      // unlikely those will accept image containers either).
+      if (!dualOk) return enqueue(() => writeCombined(text))
+      return enqueue(async () => {
+        // First entry into image-detail OR layout was something else: full
+        // rebuild + push. Pays one BLE image push and one rebuild flicker.
+        if (currentLayout !== 'image-detail') {
+          await rebuildToImageDetail(text, imageBytes)
+          return
+        }
+        // Already in image-detail. Push the image only if the bytes
+        // actually changed (different item / different cache key);
+        // otherwise just update the text.
+        if (lastImageBytes !== imageBytes) {
+          await bridge.updateImageRawData(new ImageRawDataUpdate({
+            containerID: IMAGE_ID,
+            containerName: IMAGE_NAME,
+            imageData: Array.from(imageBytes),
+          }))
+          lastImageBytes = imageBytes
+        }
+        await writeRight(text)
+      })
     },
     onTap(handler) {
       tapHandler = handler

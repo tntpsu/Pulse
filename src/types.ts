@@ -73,6 +73,12 @@ export interface DuckOpsPendingApproval {
   targets: string[]
   publishToken?: string | null
   bodyPreview?: string
+  // Optional thumbnail URL surfaced by widget_api. When present, the
+  // Approvals card renders the image in detail mode. No image = text-only
+  // detail (existing behavior). Format: any URL the phone-side WebView
+  // can fetch via CORS, dithered + sent as 4-bit greyscale to a 128×128
+  // image container on the glasses.
+  previewImageUrl?: string
 }
 
 export interface DuckOpsSalesTrends {
