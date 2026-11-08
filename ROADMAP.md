@@ -263,6 +263,8 @@ See § 6. Word Daily in the standalone queue + § Plan: Word Daily v0.2.0 below 
 
 **Status:** sideload-ready as `cue.ehpk` at `~/Documents/Cue/`. Real STT + LLM running through the deployed personal Cloudflare Worker; mock-mode fallback for setup-free demos.
 
+> **v0.7.0 (2026-11-08)** — Trivia mode (◈): the LLM answers the most recent question in the transcript, best answer then runner-up, shown verbatim with the do-not-repeat note off. Mock mode has two quiz entries; store listing gains `06-trivia.png`. Also the SDK 0.0.14 tap-and-hold menu (Switch to each mode, Calibrate me, Fresh topics; ten items, the cap) and a `dir` overlay line tallying the raw glasses direction tag against the self/other role. Queued: hold-to-listen on the temple (`LONG_PRESS_EVENT` / release, 0.0.15 carries the source) so Trivia opens the mic only while the host reads; `textColor` tiers once any app's tiered layout has been seen on glasses. Open field question: whether the near-field glasses mic, or the phone mic on the table, hears a quiz host over a PA well enough; the first quiz night decides whether Trivia stays a headline mode or a footnote.
+>
 > **v0.6.0 (2026-11-03)** — SDK 0.0.10 → 0.0.16, simulator 0.9.5, CLI 0.2.0, floor Even app 2.2.10. Glasses mic with phone fallback; `speakerRole` counted on the overlay and gated behind a default-off "Skip my own voice" setting. Open field question: how often the Even app's self/other tag is right; the answer decides whether the gate becomes the default and the Deepgram speaker picker the fallback.
 
 **What's shipped (cumulative):**
